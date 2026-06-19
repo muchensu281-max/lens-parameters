@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lens Parameters Admin</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <div class="eyebrow">后台管理</div>
+        <h1>Lens Parameters</h1>
+    </div>
+    <a class="open-site" href="/" target="_blank">打开前台</a>
+</header>
+
+<main class="shell">
+    <section class="panel auth-panel">
+        <div>
+            <h2>后台令牌</h2>
+            <p>本地默认令牌是 <code>LENS-ADMIN-2026</code>。上线后请用环境变量 <code>ADMIN_TOKEN</code> 修改。</p>
+        </div>
+        <div class="auth-row">
+            <input id="adminToken" type="password" placeholder="输入后台令牌">
+            <button id="saveTokenBtn">连接后台</button>
+        </div>
+    </section>
+
+    <section class="stats-grid" id="statsGrid">
+        <div class="stat"><span>后端</span><strong>未连接</strong></div>
+        <div class="stat"><span>卡密</span><strong>-</strong></div>
+        <div class="stat"><span>日志</span><strong>-</strong></div>
+        <div class="stat"><span>HEIC</span><strong>-</strong></div>
+    </section>
+
+    <section class="layout">
+        <div class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>卡密管理</h2>
+                    <p>新增、批量生成、启停和删除卡密。</p>
+                </div>
+                <button id="refreshBtn" class="ghost">刷新</button>
+            </div>
+
+            <div class="form-grid">
+                <label>
+                    <span>手动卡密</span>
+                    <input id="manualCode" placeholder="留空则自动生成">
+                </label>
+                <label>
+                    <span>次数</span>
+                    <input id="maxUses" type="number" min="1" value="1">
+                </label>
+                <label>
+                    <span>过期时间</span>
+                    <input id="expiresAt" type="datetime-local">
+                </label>
+                <label>
+                    <span>备注</span>
+                    <input id="note" placeholder="用途 / 客户 / 渠道">
+                </label>
+            </div>
+
+            <div class="actions">
+                <button id="createCardBtn">新增卡密</button>
+                <button id="generateCardsBtn" class="secondary">批量生成 10 个</button>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>卡密</th>
+                        <th>状态</th>
+                        <th>次数</th>
+                        <th>过期</th>
+                        <th>备注</th>
+                        <th>操作</th>
+                    </tr>
+                    </thead>
+                    <tbody id="cardsBody">
+                    <tr><td colspan="6" class="empty">等待连接后台</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <aside class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>导出日志</h2>
+                    <p>最近 500 条后台事件。</p>
+                </div>
+                <button id="clearLogsBtn" class="ghost danger">清空</button>
+            </div>
+            <div class="log-list" id="logsList">
+                <div class="empty">等待连接后台</div>
+            </div>
+        </aside>
+    </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="admin.js"></script>
+</body>
+</html>

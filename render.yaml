@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: lens-parameters
+    env: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4173
+      - key: DATA_DIR
+        value: /data
+      - key: ADMIN_TOKEN
+        sync: false
+    disk:
+      name: lens-parameters-data
+      mountPath: /data
+      sizeGB: 1
