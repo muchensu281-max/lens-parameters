@@ -30,19 +30,14 @@ function hashCode(code) {
   return crypto.createHash('sha256').update(`${salt}:${code}`).digest('hex');
 }
 
-function expiryFor(planName) {
-  if (['forever', 'permanent', 'perm', '永久'].includes(planName)) return '';
-  const days = planName === '7d' || planName === '7天' ? 7 : 30;
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  d.setHours(23, 59, 59, 999);
-  return d.toISOString();
-}
-
-function typeFor(planName) {
-  if (['forever', 'permanent', 'perm', '永久'].includes(planName)) return 'permanent';
-  if (planName === '7d' || planName === '7天') return '7d';
-  return '30d';
+function planInfo(planName) {
+  if (['forever', 'permanent', 'perm', '永久'].includes(planName)) {
+    return { type: 'permanent', durationDays: 0, validity: 'permanent' };
+  }
+  if (planName === '7d' || planName === '7天') {
+    return { type: '7d', durationDays: 7, validity: 'activation+7d' };
+  }
+  return { type: '30d', durationDays: 30, validity: 'activation+30d' };
 }
 
 function readExistingEntries() {
@@ -53,10 +48,11 @@ function readExistingEntries() {
     try {
       const fn = new Function(`return ${configMatch[1]};`);
       const config = fn();
-      if (Array.isArray(config.entries)) return config.entries;
+      if (Array.isArray(config.entries)) return migrateEntries(config.entries);
       if (Array.isArray(config.hashes)) return config.hashes.map(hash => ({
         hash,
         type: 'legacy',
+        durationDays: 0,
         expiresAt: '',
         note: '旧版永久卡',
       }));
@@ -67,9 +63,23 @@ function readExistingEntries() {
   return Array.from(text.matchAll(/'([a-f0-9]{64})'/g), match => ({
     hash: match[1],
     type: 'legacy',
+    durationDays: 0,
     expiresAt: '',
     note: '旧版永久卡',
   }));
+}
+
+function migrateEntries(entries) {
+  return entries.map(entry => {
+    if (entry.type === '30d' && entry.expiresAt && !entry.durationDays) {
+      return { ...entry, durationDays: 30, expiresAt: '' };
+    }
+    if (entry.type === '7d' && entry.expiresAt && !entry.durationDays) {
+      return { ...entry, durationDays: 7, expiresAt: '' };
+    }
+    if (!entry.durationDays) return { ...entry, durationDays: 0 };
+    return entry;
+  });
 }
 
 function writeCards(entries) {
@@ -85,11 +95,12 @@ function writeSalesFile(rows, planType) {
   fs.mkdirSync(outDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const file = path.join(outDir, `sales-${planType}-${stamp}.csv`);
-  const header = 'code,type,expiresAt,note,createdAt\n';
+  const header = 'code,type,durationDays,validity,note,createdAt\n';
   const body = rows.map(row => [
     row.code,
     row.type,
-    row.expiresAt || 'permanent',
+    row.durationDays || '',
+    row.validity,
     row.note,
     row.createdAt,
   ].map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -104,8 +115,7 @@ if (!Number.isFinite(count) || count <= 0) {
 
 const existing = readExistingEntries();
 const knownHashes = new Set(existing.map(item => item.hash));
-const type = typeFor(plan);
-const expiresAt = expiryFor(plan);
+const planData = planInfo(plan);
 const createdAt = new Date().toISOString();
 const rows = [];
 
@@ -117,25 +127,27 @@ while (rows.length < count) {
   rows.push({
     code,
     hash,
-    type,
-    expiresAt,
+    type: planData.type,
+    durationDays: planData.durationDays,
+    validity: planData.validity,
     note,
     createdAt,
   });
 }
 
-const entries = existing.concat(rows.map(({ hash, type: rowType, expiresAt: rowExpiresAt, note: rowNote, createdAt: rowCreatedAt }) => ({
+const entries = existing.concat(rows.map(({ hash, type, durationDays, note: rowNote, createdAt: rowCreatedAt }) => ({
   hash,
-  type: rowType,
-  expiresAt: rowExpiresAt,
+  type,
+  durationDays,
+  expiresAt: '',
   note: rowNote,
   createdAt: rowCreatedAt,
 })));
 
 writeCards(entries);
-const salesFile = writeSalesFile(rows, type);
+const salesFile = writeSalesFile(rows, planData.type);
 
-console.log(`Generated ${rows.length} ${type} cards`);
-console.log(`Expires at: ${expiresAt || 'permanent'}`);
+console.log(`Generated ${rows.length} ${planData.type} cards`);
+console.log(`Validity: ${planData.validity}`);
 console.log(`Plain sales file: ${salesFile}`);
 console.log(`Hash config: ${cardsPath}`);

@@ -291,7 +291,7 @@ async function confirmCard() {
     errEl.textContent = '';
 
     try {
-        const ok = await localVerifyCard(code);
+        const ok = await localVerifyCard(code, true);
 
         if (ok) {
             verifiedCode = code;
@@ -324,7 +324,7 @@ async function sha256Hex(text) {
     return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function localVerifyCard(code) {
+async function localVerifyCard(code, activate = false) {
     const config = window.LENS_CARD_CONFIG || {};
     const entries = Array.isArray(config.entries)
         ? config.entries
@@ -335,8 +335,22 @@ async function localVerifyCard(code) {
     const hash = await sha256Hex(`${salt}:${normalized}`);
     const entry = entries.find(item => item.hash === hash);
     if (!entry) return false;
+    if (entry.durationDays) return verifyDurationCard(hash, Number(entry.durationDays), activate);
     if (!entry.expiresAt) return true;
     return Date.now() <= new Date(entry.expiresAt).getTime();
+}
+
+function verifyDurationCard(hash, durationDays, activate) {
+    if (!Number.isFinite(durationDays) || durationDays <= 0) return false;
+    const key = `lens_card_activation_${hash}`;
+    let activatedAt = Number(localStorage.getItem(key) || 0);
+    if (!activatedAt) {
+        if (!activate) return true;
+        activatedAt = Date.now();
+        localStorage.setItem(key, String(activatedAt));
+    }
+    const expiresAt = activatedAt + durationDays * 24 * 60 * 60 * 1000;
+    return Date.now() <= expiresAt;
 }
 
 /* ─── 设备指纹 ─── */
