@@ -270,6 +270,18 @@ $('cardInput').addEventListener('keydown', e => {
 
 $('cardConfirmBtn').addEventListener('click', confirmCard);
 
+document.querySelectorAll('.contact-copy').forEach(card => {
+    const copyValue = card.dataset.copy || '';
+    const copy = () => copyContactValue(copyValue);
+    card.addEventListener('click', copy);
+    card.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            copy();
+        }
+    });
+});
+
 function openCardModal() {
     cardModal.classList.add('active');
     $('cardInput').value = '';
@@ -299,11 +311,12 @@ async function confirmCard() {
             cardModal.classList.remove('active');
             doExport();
         } else {
-            errEl.textContent = '❌ 卡密无效';
+            errEl.textContent = '卡密无效，请检查是否复制完整';
             $('cardInput').style.borderColor = 'rgba(248,113,113,.65)';
         }
     } catch (e) {
-        errEl.textContent = '⚠️卡密校验失败，请重试';
+        errEl.textContent = getCardErrorMessage(e);
+        $('cardInput').style.borderColor = 'rgba(248,113,113,.65)';
     } finally {
         btn.disabled = false;
         btn.textContent = '确认并导出';
@@ -320,6 +333,7 @@ function normalizeCardCode(code) {
 }
 
 async function sha256Hex(text) {
+    if (!window.crypto?.subtle) throw new Error('CARD_CRYPTO_UNSUPPORTED');
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -329,7 +343,7 @@ async function localVerifyCard(code, activate = false) {
     const entries = Array.isArray(config.entries)
         ? config.entries
         : (Array.isArray(config.hashes) ? config.hashes.map(hash => ({ hash, type: 'legacy', expiresAt: '' })) : []);
-    if (!entries.length) return false;
+    if (!entries.length) throw new Error('CARD_CONFIG_MISSING');
     const normalized = normalizeCardCode(code);
     const salt = config.salt || 'LENS_STATIC_CARD_V1';
     const hash = await sha256Hex(`${salt}:${normalized}`);
@@ -337,7 +351,8 @@ async function localVerifyCard(code, activate = false) {
     if (!entry) return false;
     if (entry.durationDays) return verifyDurationCard(hash, Number(entry.durationDays), activate);
     if (!entry.expiresAt) return true;
-    return Date.now() <= new Date(entry.expiresAt).getTime();
+    if (Date.now() <= new Date(entry.expiresAt).getTime()) return true;
+    throw new Error('CARD_EXPIRED');
 }
 
 function verifyDurationCard(hash, durationDays, activate) {
@@ -350,7 +365,44 @@ function verifyDurationCard(hash, durationDays, activate) {
         localStorage.setItem(key, String(activatedAt));
     }
     const expiresAt = activatedAt + durationDays * 24 * 60 * 60 * 1000;
-    return Date.now() <= expiresAt;
+    if (Date.now() <= expiresAt) return true;
+    throw new Error('CARD_EXPIRED');
+}
+
+function getCardErrorMessage(err) {
+    const code = err?.message || '';
+    if (code === 'CARD_CONFIG_MISSING') return '卡密配置未加载，请刷新页面后重试';
+    if (code === 'CARD_CRYPTO_UNSUPPORTED') return '当前浏览器不支持卡密校验，请换新版浏览器';
+    if (code === 'CARD_EXPIRED') return '卡密已过期，请联系客服续费';
+    return '卡密校验失败，请刷新后重试';
+}
+
+async function copyContactValue(text) {
+    if (!text) return;
+    try {
+        let copied = false;
+        if (navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                copied = true;
+            } catch (e) {}
+        }
+        if (!copied) {
+            const input = document.createElement('input');
+            input.value = text;
+            input.setAttribute('readonly', '');
+            input.style.position = 'fixed';
+            input.style.opacity = '0';
+            document.body.appendChild(input);
+            input.select();
+            copied = document.execCommand('copy');
+            input.remove();
+        }
+        if (!copied) throw new Error('COPY_FAILED');
+        showToast('QQ号已复制', 'success');
+    } catch (e) {
+        showToast('复制失败，请手动长按复制', 'error');
+    }
 }
 
 /* ─── 设备指纹 ─── */

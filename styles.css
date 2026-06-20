@@ -201,6 +201,19 @@ body {
     background:rgba(255,255,255,0.12);
     border:1px solid rgba(255,255,255,0.18);
     box-shadow:0 3px 14px rgba(0,0,0,0.12);
+    transition:transform .18s ease,border-color .18s ease,background .18s ease;
+}
+.contact-copy {
+    cursor:pointer;
+}
+.contact-copy:focus-visible {
+    outline:2px solid rgba(255,255,255,0.72);
+    outline-offset:3px;
+}
+.contact-copy:active {
+    transform:scale(0.98);
+    background:rgba(255,255,255,0.16);
+    border-color:rgba(255,255,255,0.28);
 }
 .contact-card img {
     width:100%;aspect-ratio:1;display:block;
