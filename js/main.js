@@ -236,20 +236,10 @@ $('tutorialClose').addEventListener('click', () => tutorialMask.classList.remove
 tutorialMask.addEventListener('click', e => { if (e.target === tutorialMask) tutorialMask.classList.remove('active'); });
 dlModal.addEventListener('click', e => { if (e.target === dlModal) dlModal.classList.remove('active'); });
 
-/* ─── 导出按钮（带卡密验证）─── */
+/* ─── 导出按钮（前端临时免卡密）─── */
 $('exportBtn').addEventListener('click', async () => {
     if (!filesList.length) { showToast('请先选择图片', 'error'); return; }
-
-    if (verifiedCode) {
-        setLoading(true, '验证卡密...');
-        const ok = await silentVerify(verifiedCode);
-        setLoading(false);
-        if (ok) { doExport(); return; }
-        verifiedCode = '';
-        sessionStorage.removeItem('lp_verified_code');
-    }
-
-    openCardModal();
+    doExport();
 });
 
 /* ─── 卡密弹窗 ─── */
@@ -628,7 +618,9 @@ function updateFormatInfo() {
 
     info.classList.remove('warn');
     if (format === 'jpeg') {
-        info.textContent = 'JPEG 兼容性最好，后端会写入 EXIF。';
+        info.textContent = backendCaps?.offline
+            ? '当前为静态前端模式，JPEG 可直接导出；后端 EXIF 写入明天接入。'
+            : 'JPEG 兼容性最好，后端会写入 EXIF。';
     } else if (format === 'same') {
         if (filesList.some(f => f.isHeif) && backendCaps && !backendCaps.heifHevcWrite) {
             info.textContent = '当前本地后端暂不支持 HEIC 编码，HEIF 原图会提示无法按原格式导出。';
@@ -811,7 +803,9 @@ async function processOne(item) {
     try {
         return await processOneBackend(item);
     } catch (e) {
-        if (($('outputFormat')?.value || 'jpeg') !== 'jpeg' || item.isHeif) throw e;
+        const format = $('outputFormat')?.value || 'jpeg';
+        const wantsHeic = format === 'heif' || (format === 'same' && item.isHeif);
+        if (wantsHeic) throw e;
         console.warn('后端处理失败，回退到浏览器 JPEG 导出', e);
         return processOneClient(item);
     }
