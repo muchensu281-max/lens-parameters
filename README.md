@@ -14,6 +14,8 @@
 - EXIF 写入
 - HEIC/HEIF 能力检测
 
+当前 GitHub Pages 版本使用纯前端卡密校验，暂时不依赖后端。
+
 ## 运行
 
 ```bash
@@ -38,6 +40,22 @@ http://127.0.0.1:4173/admin
 ```text
 DEMO-2026-LENS-0001
 ```
+
+## 生成前端卡密
+
+```bash
+npm run cards -- 20
+```
+
+这会更新：
+
+```text
+js/cards.js
+```
+
+明文卡密会保存到本地 `data/generated-cards-*.txt`，`data/` 已被 `.gitignore` 忽略，不会推到 GitHub。
+
+注意：纯前端卡密只能作为轻量门槛，不能防懂代码的人绕过。强付费、防共享、可禁用和统计次数仍然需要后端。
 
 后台默认令牌：
 

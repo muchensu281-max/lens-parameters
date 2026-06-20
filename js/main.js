@@ -236,10 +236,18 @@ $('tutorialClose').addEventListener('click', () => tutorialMask.classList.remove
 tutorialMask.addEventListener('click', e => { if (e.target === tutorialMask) tutorialMask.classList.remove('active'); });
 dlModal.addEventListener('click', e => { if (e.target === dlModal) dlModal.classList.remove('active'); });
 
-/* ─── 导出按钮（前端临时免卡密）─── */
+/* ─── 导出按钮（纯前端卡密验证）─── */
 $('exportBtn').addEventListener('click', async () => {
     if (!filesList.length) { showToast('请先选择图片', 'error'); return; }
-    doExport();
+
+    if (verifiedCode) {
+        const ok = await silentVerify(verifiedCode);
+        if (ok) { doExport(); return; }
+        verifiedCode = '';
+        sessionStorage.removeItem('lp_verified_code');
+    }
+
+    openCardModal();
 });
 
 /* ─── 卡密弹窗 ─── */
@@ -283,25 +291,19 @@ async function confirmCard() {
     errEl.textContent = '';
 
     try {
-        if (!deviceHashVal) deviceHashVal = await getDeviceHash();
-        const res = await fetch('api.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'verify', code, device_hash: deviceHashVal })
-        });
-        const data = await res.json();
+        const ok = await localVerifyCard(code);
 
-        if (data.code === 200) {
+        if (ok) {
             verifiedCode = code;
             sessionStorage.setItem('lp_verified_code', code);
             cardModal.classList.remove('active');
             doExport();
         } else {
-            errEl.textContent = '❌ ' + data.msg;
+            errEl.textContent = '❌ 卡密无效';
             $('cardInput').style.borderColor = 'rgba(248,113,113,.65)';
         }
     } catch (e) {
-        errEl.textContent = '⚠️网络错误，请重试';
+        errEl.textContent = '⚠️卡密校验失败，请重试';
     } finally {
         btn.disabled = false;
         btn.textContent = '确认并导出';
@@ -309,16 +311,27 @@ async function confirmCard() {
 }
 
 async function silentVerify(code) {
-    try {
-        if (!deviceHashVal) deviceHashVal = await getDeviceHash();
-        const res = await fetch('api.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'verify', code, device_hash: deviceHashVal })
-        });
-        const data = await res.json();
-        return data.code === 200;
-    } catch (e) { return false; }
+    try { return await localVerifyCard(code); } catch (e) { return false; }
+}
+
+function normalizeCardCode(code) {
+    const raw = String(code || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16);
+    return raw.match(/.{1,4}/g)?.join('-') || '';
+}
+
+async function sha256Hex(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function localVerifyCard(code) {
+    const config = window.LENS_CARD_CONFIG || {};
+    const hashes = Array.isArray(config.hashes) ? config.hashes : [];
+    if (!hashes.length) return false;
+    const normalized = normalizeCardCode(code);
+    const salt = config.salt || 'LENS_STATIC_CARD_V1';
+    const hash = await sha256Hex(`${salt}:${normalized}`);
+    return hashes.includes(hash);
 }
 
 /* ─── 设备指纹 ─── */
@@ -800,11 +813,16 @@ function collectExportMeta() {
 }
 
 async function processOne(item) {
+    const format = $('outputFormat')?.value || 'jpeg';
+    const wantsHeic = format === 'heif' || (format === 'same' && item.isHeif);
+    if (backendCaps?.offline) {
+        if (wantsHeic) throw new Error('静态前端暂不支持 HEIC 导出，请选择 JPEG');
+        return processOneClient(item);
+    }
+
     try {
         return await processOneBackend(item);
     } catch (e) {
-        const format = $('outputFormat')?.value || 'jpeg';
-        const wantsHeic = format === 'heif' || (format === 'same' && item.isHeif);
         if (wantsHeic) throw e;
         console.warn('后端处理失败，回退到浏览器 JPEG 导出', e);
         return processOneClient(item);

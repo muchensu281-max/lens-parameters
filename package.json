@@ -4,7 +4,8 @@
   "description": "本地复刻版，包含原站公开页面、样式、前端图片处理逻辑和一个本地模拟卡密接口。",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "cards": "node scripts/generate-cards.js",
+    "test": "node --check server.js && node --check js/main.js && node --check admin.js && node --check scripts/generate-cards.js",
     "start": "node server.js"
   },
   "keywords": [],
