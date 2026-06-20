@@ -146,6 +146,13 @@ const cardModal = $('cardModal');
 renderPresets();
 initBackendCapabilities();
 
+/* ─── 质量滑块 ─── */
+const $jpegQuality = $('jpegQuality');
+if ($jpegQuality) $jpegQuality.addEventListener('input', () => {
+    const lb = $('qualityLabel');
+    if (lb) lb.textContent = $jpegQuality.value;
+});
+
 /* ─── 品牌Tab ─── */
 $('brandTabs').addEventListener('click', e => {
     const tab = e.target.closest('.brand-tab');
@@ -434,6 +441,8 @@ async function handleFiles(files) {
     );
     if (!imgs.length) { showToast('请选择图片文件', 'error'); setLoading(false); return; }
 
+    let firstExifRead = false;
+
     for (let i = 0; i < imgs.length; i++) {
         setLoading(true, `加载中 ${i + 1}/${imgs.length}...`);
         const f = imgs[i];
@@ -451,7 +460,19 @@ async function handleFiles(files) {
                 url = URL.createObjectURL(f);
             }
             const dim = await readImageSize(url);
-            filesList.push({ file: pf, sourceFile, dataUrl: url, objectUrl: url, width: dim.width, height: dim.height, isHeif: isH });
+
+            // 读取第一张图片的 EXIF 并自动填充参数（只在第一次上传时）
+            let exifData = null;
+            if (!firstExifRead && !isH) {
+                try { exifData = await tryReadExifFromFile(f); } catch (e) { /* 静默失败 */ }
+                if (exifData) {
+                    autoFillFromExif(exifData);
+                    matchPresetFromExif(exifData);
+                    firstExifRead = true;
+                }
+            }
+
+            filesList.push({ file: pf, sourceFile, dataUrl: url, objectUrl: url, width: dim.width, height: dim.height, isHeif: isH, exif: exifData });
         } catch (e) {
             showToast(`处理失败：${f.name}`, 'error');
         }
@@ -516,7 +537,7 @@ function clearAllFields() {
     syncDtPlaceholder();
     document.querySelectorAll('.preset-card').forEach(b => b.classList.remove('selected'));
     ['make', 'model', 'lensModel', 'software', 'fNumber', 'exposureTime', 'iso','focalLength', 'focalLength35', 'flash', 'meteringMode', 'whiteBalance',
-        'exposureBias', 'offsetTime', 'imageWidth', 'imageHeight'].forEach(id => {
+        'exposureBias', 'offsetTime', 'imageWidth', 'imageHeight', 'gpsLatitude', 'gpsLongitude', 'gpsLatitudeRef', 'gpsLongitudeRef', 'gpsAltitude', 'gpsAltitudeRef'].forEach(id => {
             const el = $(id);
             if (el) el.value = '';
         });document.querySelectorAll('.res-chip').forEach(b => b.classList.remove('selected'));
@@ -617,8 +638,295 @@ function buildExif(w, h) {
             ex['Exif'][piexif.ExifIFD.PixelXDimension] = fw;
             ex['Exif'][piexif.ExifIFD.PixelYDimension] = fh;
         }
+
+        // GPS
+        const gpsLat = $('gpsLatitude').value.trim();
+        const gpsLon = $('gpsLongitude').value.trim();
+        if (gpsLat && gpsLon) {
+            const gpsLatRef = $('gpsLatitudeRef').value.trim() || (parseFloat(gpsLat) >= 0 ? 'N' : 'S');
+            const gpsLonRef = $('gpsLongitudeRef').value.trim() || (parseFloat(gpsLon) >= 0 ? 'E' : 'W');
+            ex['GPS'][piexif.GPSIFD.GPSLatitudeRef] = gpsLatRef;
+            ex['GPS'][piexif.GPSIFD.GPSLongitudeRef] = gpsLonRef;
+            ex['GPS'][piexif.GPSIFD.GPSLatitude] = decimalToGpsRational(Math.abs(parseFloat(gpsLat)));
+            ex['GPS'][piexif.GPSIFD.GPSLongitude] = decimalToGpsRational(Math.abs(parseFloat(gpsLon)));
+
+            const alt = $('gpsAltitude').value.trim();
+            if (alt) {
+                const altRef = $('gpsAltitudeRef').value.trim() || '0';
+                ex['GPS'][piexif.GPSIFD.GPSAltitudeRef] = parseInt(altRef, 10) || 0;
+                ex['GPS'][piexif.GPSIFD.GPSAltitude] = [Math.round(Math.abs(parseFloat(alt)) * 100), 100];
+            }
+        }
     } catch (e) { console.error('buildExif:', e); }
     return ex;
+}
+
+/* ─── 从图片文件读取 EXIF ─── */
+function readExifFromFile(file, url) {
+    // 对于 JPEG 文件，直接从文件读取 EXIF
+    if (file.type === 'image/jpeg' || file.name.toLowerCase().match(/\.jpe?g$/)) {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        const result = {};
+        // 用同步方式，通过 Image 加载后读 dataUrl 中的 EXIF
+        // piexifjs 需要 JPEG data URL 来读取 EXIF
+        return null; // 异步模式，由调用方处理
+    }
+    return null;
+}
+
+/**
+ * 尝试从图片 Data URL 读取 EXIF 并填充表单。
+ * 使用 Image + 文件 reader 获取 JPEG 二进制来解析 EXIF。
+ */
+function tryReadExifFromFile(file) {
+    return new Promise((resolve) => {
+        if (!window.piexif || !(file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name))) {
+            resolve(null);
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const dataUrl = reader.result;
+                const exif = piexif.load(dataUrl);
+                resolve(exif || null);
+            } catch (e) {
+                resolve(null);
+            }
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+    });
+}
+
+/**
+ * 将 EXIF 数据自动填充到表单中
+ */
+function autoFillFromExif(exif) {
+    if (!exif) return;
+
+    const fields = {};
+    const map = (src, dst, fn) => {
+        try { const v = fn ? fn(src) : src; if (v !== undefined && v !== null && v !== '') fields[dst] = v; } catch (e) {}
+    };
+
+    // 0th IFD
+    if (exif['0th']) {
+        const z = exif['0th'];
+        map(z[piexif.ImageIFD.Make], 'make', v => String(v).replace(/\x00/g, '').trim());
+        map(z[piexif.ImageIFD.Model], 'model', v => String(v).replace(/\x00/g, '').trim());
+        map(z[piexif.ImageIFD.Software], 'software', v => String(v).replace(/\x00/g, '').trim());
+        map(z[piexif.ImageIFD.DateTime], 'dateTime', v => String(v).trim());
+    }
+
+    // Exif IFD
+    if (exif['Exif']) {
+        const e = exif['Exif'];
+        map(exifRationalToFloat(e[piexif.ExifIFD.FNumber]), 'fNumber');
+        map(exifRationalToFloat(e[piexif.ExifIFD.FocalLength]), 'focalLength');
+        map(e[piexif.ExifIFD.FocalLengthIn35mmFilm], 'focalLength35', v => String(v));
+        map(e[piexif.ExifIFD.ISOSpeedRatings], 'iso', v => String(v));
+        map(exifRationalToShutter(e[piexif.ExifIFD.ExposureTime]), 'exposureTime');
+        map(exifRationalToFloat(e[piexif.ExifIFD.ExposureBiasValue]), 'exposureBias', v => {
+            const num = Math.round(v * 100) / 100;
+            return num === Math.round(num) ? String(Math.round(num)) : num.toFixed(1);
+        });
+        map(e[piexif.ExifIFD.LensModel], 'lensModel', v => String(v).replace(/\x00/g, '').trim());
+        map(e[piexif.ExifIFD.Flash], 'flash', v => String(v));
+        map(e[piexif.ExifIFD.MeteringMode], 'meteringMode', v => String(v));
+        map(e[piexif.ExifIFD.WhiteBalance], 'whiteBalance', v => String(v));
+        map(e[piexif.ExifIFD.DateTimeOriginal], 'dateTimeOriginal', v => {
+            const s = String(v).trim();
+            // EXIF 日期格式: "2024:12:15 14:30:00" -> datetime-local "2024-12-15T14:30"
+            const m = s.match(/^(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2})/);
+            return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}` : '';
+        });
+    }
+
+    // GPS IFD
+    if (exif['GPS']) {
+        const g = exif['GPS'];
+        map(g[piexif.GPSIFD.GPSLatitude], 'gpsLatitude', gpsRationalToDecimal);
+        map(g[piexif.GPSIFD.GPSLongitude], 'gpsLongitude', gpsRationalToDecimal);
+        map(g[piexif.GPSIFD.GPSLatitudeRef], 'gpsLatitudeRef', v => String(v).trim());
+        map(g[piexif.GPSIFD.GPSLongitudeRef], 'gpsLongitudeRef', v => String(v).trim());
+        map(g[piexif.GPSIFD.GPSAltitude], 'gpsAltitude', exifRationalToFloat);
+        map(g[piexif.GPSIFD.GPSAltitudeRef], 'gpsAltitudeRef', v => String(v));
+    }
+
+    // 应用填充
+    let filledCount = 0;
+    Object.entries(fields).forEach(([id, value]) => {
+        const el = $(id);
+        if (el && !el.value) {
+            el.value = value;
+            filledCount++;
+        }
+    });
+
+    // 同步时间占位
+    if (fields.dateTimeOriginal) syncDtPlaceholder();
+
+    // 更新分辨率信息
+    if (filesList.length) updateResolutionInfo();
+
+    if (filledCount > 0) {
+        showBubble();
+        showToast(`📋 已自动填充 ${filledCount} 个参数`, 'success');
+    }
+}
+
+/**
+ * 根据 EXIF 读取的 Make/Model 在预设库中智能匹配
+ */
+function matchPresetFromExif(exif) {
+    if (!exif || !exif['0th']) return;
+
+    let rawMake = '';
+    let rawModel = '';
+    try {
+        rawMake = String(exif['0th'][piexif.ImageIFD.Make] || '').replace(/\x00/g, '').trim();
+        rawModel = String(exif['0th'][piexif.ImageIFD.Model] || '').replace(/\x00/g, '').trim();
+    } catch (e) { return; }
+    if (!rawModel) return;
+
+    const modelLC = rawModel.toLowerCase();
+    const makeLC = rawMake.toLowerCase();
+
+    // 确定品牌
+    const brandMap = {
+        apple: ['apple', 'iphone', 'ipad'],
+        vivo: ['vivo'],
+        iqoo: ['iqoo'],
+        oppo: ['oppo'],
+        oneplus: ['oneplus', 'one plus'],
+        xiaomi: ['xiaomi', 'mi '],
+        redmi: ['redmi'],
+    };
+    let matchedBrand = null;
+
+    // 先通过 Make 匹配
+    for (const [brand, keywords] of Object.entries(brandMap)) {
+        if (keywords.some(k => makeLC.includes(k) || modelLC.includes(k))) {
+            matchedBrand = brand;
+            break;
+        }
+    }
+
+    if (!matchedBrand) return;
+
+    // 切换到匹配的品牌
+    if (matchedBrand !== currentBrand) {
+        currentBrand = matchedBrand;
+        document.querySelectorAll('.brand-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.brand === matchedBrand);
+        });
+        renderPresets();
+    }
+
+    // 在预设中查找最匹配的型号
+    const presetList = PRESETS[matchedBrand] || [];
+    if (!presetList.length) return;
+
+    // 1. 精确匹配
+    let best = presetList.findIndex(p => p.model.toLowerCase() === modelLC);
+
+    // 2. 包含匹配
+    if (best === -1) {
+        best = presetList.findIndex(p =>
+            p.model.toLowerCase().includes(modelLC) || modelLC.includes(p.model.toLowerCase())
+        );
+    }
+
+    // 3. 模糊匹配（如 "iPhone16,2" -> "iPhone 16 Pro"）
+    if (best === -1 && matchedBrand === 'apple') {
+        // 尝试从 Apple 内部型号推导产品名
+        const appleModelMap = {
+            'iphone17,1': 'iPhone 17 Pro Max', 'iphone17,2': 'iPhone 17 Pro',
+            'iphone18,1': 'iPhone 17', 'iphone18,2': 'iPhone 17 Plus',
+            'iphone16,1': 'iPhone 16 Pro Max', 'iphone16,2': 'iPhone 16 Pro',
+            'iphone17,3': 'iPhone 16', 'iphone17,4': 'iPhone 16 Plus',
+            'iphone15,2': 'iPhone 14 Pro Max', 'iphone15,3': 'iPhone 14 Pro',
+            'iphone14,7': 'iPhone 14', 'iphone14,8': 'iPhone 14 Plus',
+        };
+        const mappedModel = appleModelMap[modelLC];
+        if (mappedModel) {
+            best = presetList.findIndex(p => p.model === mappedModel);
+        }
+    }
+
+    if (best !== -1) {
+        // 高亮选中预设
+        setTimeout(() => {
+            const cards = document.querySelectorAll('.preset-card');
+            cards.forEach((c, i) => c.classList.toggle('selected', i === best));
+            const preset = presetList[best];
+            // 只在字段未手动修改时应用预设补充
+            applyPresetIfEmpty(preset);
+        }, 100);
+        showToast(`🔍 匹配到预设: ${presetList[best].model}`, 'success');
+    }
+}
+
+/**
+ * 只在字段为空时才应用预设值（作为补全，不覆盖 EXIF 已读到的值）
+ */
+function applyPresetIfEmpty(p) {
+    const setIfEmpty = (id, val) => { const el = $(id); if (el && !el.value) el.value = val; };
+    if (p.make && !$('make').value) setIfEmpty('make', p.make);
+    if (p.sw && !$('software').value) setIfEmpty('software', p.sw);
+    if (!$('meteringMode').value) setIfEmpty('meteringMode', '5');
+    if (!$('whiteBalance').value) setIfEmpty('whiteBalance', '0');
+    if (!$('flash').value) setIfEmpty('flash', '16');
+    if (!$('offsetTime').value) setIfEmpty('offsetTime', '+08:00');
+    showBubble();
+}
+
+/* ─── EXIF 读取辅助函数 ─── */
+function exifRationalToFloat(val) {
+    if (!val) return null;
+    if (Array.isArray(val) && val.length === 2 && val[1] !== 0) {
+        return val[0] / val[1];
+    }
+    if (typeof val === 'number') return val;
+    const n = parseFloat(val);
+    return isNaN(n) ? null : n;
+}
+
+function exifRationalToShutter(val) {
+    if (!val) return null;
+    if (Array.isArray(val) && val.length === 2 && val[1] !== 0) {
+        const f = val[0] / val[1];
+        if (f >= 0.5) return String(Math.round(f * 10) / 10);
+        return `1/${Math.round(1 / f)}`;
+    }
+    if (typeof val === 'number') {
+        return val >= 0.5 ? String(Math.round(val * 10) / 10) : `1/${Math.round(1 / val)}`;
+    }
+    return String(val);
+}
+
+function gpsRationalToDecimal(val) {
+    if (!val || !Array.isArray(val) || val.length < 3) return null;
+    const deg = val[0][1] ? val[0][0] / val[0][1] : val[0];
+    const min = val[1][1] ? val[1][0] / val[1][1] : val[1];
+    const sec = val[2][1] ? val[2][0] / val[2][1] : val[2];
+    const decimal = deg + min / 60 + sec / 3600;
+    return decimal.toFixed(6);
+}
+
+function decimalToGpsRational(decimal) {
+    if (!decimal || isNaN(decimal)) return null;
+    const deg = Math.floor(decimal);
+    const minFloat = (decimal - deg) * 60;
+    const min = Math.floor(minFloat);
+    const sec = (minFloat - min) * 60;
+    return [
+        [deg, 1],
+        [min, 1],
+        [Math.round(sec * 1000), 1000]  // 精度 0.001 秒
+    ];
 }
 
 function readImageSize(url) {
@@ -812,6 +1120,8 @@ function getOutputExt(item) {
 }
 
 function collectExportMeta() {
+    const q = $('jpegQuality');
+    const quality = q ? parseInt(q.value, 10) || 95 : 95;
     return {
         make: $('make').value.trim(),
         model: $('model').value.trim(),
@@ -827,7 +1137,7 @@ function collectExportMeta() {
         imageHeight: $('imageHeight').value.trim(),
         lockAspect: isAspectLocked(),
         dateTimeOriginal: dtInput.value,
-        quality: 95,
+        quality,
     };
 }
 
@@ -891,7 +1201,9 @@ function processOneClient(item) {
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
                 ctx.drawImage(img, 0, 0, target.width, target.height);
-                const jpg = cv.toDataURL('image/jpeg', 0.95);
+                const q = $('jpegQuality');
+                const quality = q ? parseInt(q.value, 10) / 100 : 0.95;
+                const jpg = cv.toDataURL('image/jpeg', quality);
                 if (!jpg || jpg.length < 100) { reject(new Error('转换失败')); return; }
                 let blob;
                 try {
