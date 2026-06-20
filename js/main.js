@@ -326,12 +326,17 @@ async function sha256Hex(text) {
 
 async function localVerifyCard(code) {
     const config = window.LENS_CARD_CONFIG || {};
-    const hashes = Array.isArray(config.hashes) ? config.hashes : [];
-    if (!hashes.length) return false;
+    const entries = Array.isArray(config.entries)
+        ? config.entries
+        : (Array.isArray(config.hashes) ? config.hashes.map(hash => ({ hash, type: 'legacy', expiresAt: '' })) : []);
+    if (!entries.length) return false;
     const normalized = normalizeCardCode(code);
     const salt = config.salt || 'LENS_STATIC_CARD_V1';
     const hash = await sha256Hex(`${salt}:${normalized}`);
-    return hashes.includes(hash);
+    const entry = entries.find(item => item.hash === hash);
+    if (!entry) return false;
+    if (!entry.expiresAt) return true;
+    return Date.now() <= new Date(entry.expiresAt).getTime();
 }
 
 /* ─── 设备指纹 ─── */
