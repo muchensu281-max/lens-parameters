@@ -641,6 +641,10 @@ function normalizeLensModelForExif(lensModel) {
     return text.replace(/\s+\d+(?:\.\d+)?\s*mm\s*[ƒfF]\s*\d+(?:\.\d+)?\s*$/u, '').trim();
 }
 
+function hasFullLensLabel(lensModel) {
+    return /\d+(?:\.\d+)?\s*mm\s*[ƒfF]\s*\d+(?:\.\d+)?\s*$/u.test(String(lensModel || ''));
+}
+
 function parseShutter(s) {
     if (!s) return null;
     const m = String(s).trim().match(/^(\d+)\s*\/\s*(\d+)$/);
@@ -730,7 +734,8 @@ function buildExif(w, h, meta = collectExportMeta()) {
         const make = meta.make || '';
         const model = meta.model || '';
         const sw = meta.software || '';
-        const lens = normalizeLensModelForExif(meta.lensModel);
+        const lens = meta.lensModel || '';
+        const fullLensLabel = hasFullLensLabel(lens);
 
         if (make) ex['0th'][piexif.ImageIFD.Make] = make;
         if (model) ex['0th'][piexif.ImageIFD.Model] = model;
@@ -744,10 +749,12 @@ function buildExif(w, h, meta = collectExportMeta()) {
         if (et) ex['Exif'][piexif.ExifIFD.ExposureTime] = et;
         const iso = meta.iso;
         if (iso) ex['Exif'][piexif.ExifIFD.ISOSpeedRatings] = +iso;
-        const fl = rational(meta.focalLength);
-        if (fl) ex['Exif'][piexif.ExifIFD.FocalLength] = fl;
-        const fl35 = meta.focalLength35;
-        if (fl35) ex['Exif'][piexif.ExifIFD.FocalLengthIn35mmFilm] = +fl35;
+        if (!fullLensLabel) {
+            const fl = rational(meta.focalLength);
+            if (fl) ex['Exif'][piexif.ExifIFD.FocalLength] = fl;
+            const fl35 = meta.focalLength35;
+            if (fl35) ex['Exif'][piexif.ExifIFD.FocalLengthIn35mmFilm] = +fl35;
+        }
         const flash = $('flash').value;
         if (flash !== '') ex['Exif'][piexif.ExifIFD.Flash] = +flash;
         const mm = $('meteringMode').value;
