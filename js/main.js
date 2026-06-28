@@ -120,9 +120,9 @@ let backendCaps = null;
 let exportRandomSeed = 0;
 
 const IPHONE_17_PRO_MAX_LENSES = [
-    { id: 'main', display: '主相机 — 24 mm ƒ1.78', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
-    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
-    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
+    { id: 'main', display: '主相机 — 24 mm ƒ1.78', exifLensModel: '主相机', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
+    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', exifLensModel: '超广角相机', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
+    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', exifLensModel: '长焦相机', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
 ];
 
 /* ─── DOM ─── */
@@ -711,6 +711,7 @@ function randomizeExportMeta(meta, itemIndex = 0) {
     return {
         ...meta,
         lensModel: lens.display,
+        exifLensModel: lens.exifLensModel,
         fNumber: lens.fNumber,
         exposureTime: randomizeShutter(meta.exposureTime, itemIndex),
         iso: randomizeIso(meta.iso, itemIndex),
@@ -734,8 +735,7 @@ function buildExif(w, h, meta = collectExportMeta()) {
         const make = meta.make || '';
         const model = meta.model || '';
         const sw = meta.software || '';
-        const lens = meta.lensModel || '';
-        const fullLensLabel = hasFullLensLabel(lens);
+        const lens = meta.exifLensModel || normalizeLensModelForExif(meta.lensModel);
 
         if (make) ex['0th'][piexif.ImageIFD.Make] = make;
         if (model) ex['0th'][piexif.ImageIFD.Model] = model;
@@ -749,12 +749,10 @@ function buildExif(w, h, meta = collectExportMeta()) {
         if (et) ex['Exif'][piexif.ExifIFD.ExposureTime] = et;
         const iso = meta.iso;
         if (iso) ex['Exif'][piexif.ExifIFD.ISOSpeedRatings] = +iso;
-        if (!fullLensLabel) {
-            const fl = rational(meta.focalLength);
-            if (fl) ex['Exif'][piexif.ExifIFD.FocalLength] = fl;
-            const fl35 = meta.focalLength35;
-            if (fl35) ex['Exif'][piexif.ExifIFD.FocalLengthIn35mmFilm] = +fl35;
-        }
+        const fl = rational(meta.focalLength);
+        if (fl) ex['Exif'][piexif.ExifIFD.FocalLength] = fl;
+        const fl35 = meta.focalLength35;
+        if (fl35) ex['Exif'][piexif.ExifIFD.FocalLengthIn35mmFilm] = +fl35;
         const flash = $('flash').value;
         if (flash !== '') ex['Exif'][piexif.ExifIFD.Flash] = +flash;
         const mm = $('meteringMode').value;
@@ -982,6 +980,7 @@ function collectExportMeta(itemIndex = 0) {
         make: $('make').value.trim(),
         model: $('model').value.trim(),
         lensModel: $('lensModel').value.trim(),
+        exifLensModel: normalizeLensModelForExif($('lensModel').value),
         software: $('software').value.trim(),
         fNumber: $('fNumber').value.trim(),
         exposureTime: $('exposureTime').value.trim(),

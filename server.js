@@ -242,8 +242,7 @@ function buildExifTags(meta, info) {
   if (meta.make) tags.Make = String(meta.make);
   if (meta.model) tags.Model = String(meta.model);
   if (meta.software) tags.Software = String(meta.software);
-  const lensModel = String(meta.lensModel || '').trim();
-  const fullLensLabel = hasFullLensLabel(lensModel);
+  const lensModel = String(meta.exifLensModel || normalizeLensModelForExif(meta.lensModel)).trim();
   if (lensModel) tags.LensModel = lensModel;
 
   if (meta.fNumber) {
@@ -252,10 +251,8 @@ function buildExifTags(meta, info) {
     if (Number.isFinite(fNumber) && fNumber > 0) tags.ApertureValue = Number((Math.log2(fNumber * fNumber)).toFixed(2));
   }
   if (meta.iso) tags.ISO = Number.parseInt(meta.iso, 10);
-  if (!fullLensLabel) {
-    if (meta.focalLength) tags.FocalLength = Number.parseFloat(meta.focalLength);
-    if (meta.focalLength35) tags.FocalLengthIn35mmFormat = Number.parseInt(meta.focalLength35, 10);
-  }
+  if (meta.focalLength) tags.FocalLength = Number.parseFloat(meta.focalLength);
+  if (meta.focalLength35) tags.FocalLengthIn35mmFormat = Number.parseInt(meta.focalLength35, 10);
   if (meta.exposureBias !== '' && meta.exposureBias != null) tags.ExposureCompensation = Number.parseFloat(meta.exposureBias);
 
   const shutter = parseShutter(meta.exposureTime);
