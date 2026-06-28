@@ -117,6 +117,7 @@ let processedBlobs = [];
 let verifiedCode = sessionStorage.getItem('lp_verified_code') || '';
 let deviceHashVal = '';
 let backendCaps = null;
+let exportRandomSeed = 0;
 
 /* ─── DOM ─── */
 const $ = id => document.getElementById(id);
@@ -614,6 +615,78 @@ function parseShutter(s) {
     return null;
 }
 
+function parseShutterSeconds(value) {
+    const r = parseShutter(value);
+    if (!r) return 0;
+    return r[0] / r[1];
+}
+
+function cleanNumber(n, digits = 2) {
+    if (!Number.isFinite(n)) return '';
+    return String(Number(n.toFixed(digits)));
+}
+
+function clamp(n, min, max) {
+    return Math.min(max, Math.max(min, n));
+}
+
+function pickVariant(values, baseValue, index, salt = 0) {
+    if (!values.length) return baseValue;
+    const start = Math.abs(exportRandomSeed + index * 17 + salt) % values.length;
+    let picked = values[start];
+    if (values.length > 1 && picked === baseValue) picked = values[(start + 1) % values.length];
+    return picked;
+}
+
+function randomizeIso(value, index) {
+    const base = Math.max(32, parseInt(value, 10) || 100);
+    const standard = [32, 40, 50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200];
+    const near = standard.filter(v => v >= base * 0.45 && v <= base * 2.3);
+    return String(pickVariant(near.length ? near : standard, base, index, 11));
+}
+
+function randomizeExposureBias(value, index) {
+    const base = parseFloat(value);
+    const center = Number.isFinite(base) ? base : 0;
+    const variants = [-0.7, -0.3, 0, 0.3, 0.7]
+        .map(delta => cleanNumber(clamp(center + delta, -2, 2), 1));
+    return pickVariant([...new Set(variants)], cleanNumber(center, 1), index, 53);
+}
+
+function randomizeShutter(value, index) {
+    const baseSeconds = parseShutterSeconds(value) || 1 / 100;
+    const factors = [0.55, 0.7, 0.85, 1, 1.2, 1.45, 1.7];
+    const target = baseSeconds * factors[Math.abs(exportRandomSeed + index * 17 + 67) % factors.length];
+    const denoms = [15, 20, 25, 30, 33, 40, 50, 60, 80, 100, 120, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000];
+    const denom = denoms.reduce((best, cur) => Math.abs((1 / cur) - target) < Math.abs((1 / best) - target) ? cur : best, denoms[0]);
+    return `1/${denom}`;
+}
+
+const IPHONE_17_PRO_MAX_LENSES = [
+    { lensModel: '主相机 — 24 mm ƒ1.78', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
+    { lensModel: '超广角相机 — 13 mm ƒ2.2', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
+    { lensModel: '长焦相机 — 100 mm ƒ2.8', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
+];
+
+function pickLensProfile(index) {
+    return IPHONE_17_PRO_MAX_LENSES[Math.abs(exportRandomSeed + index) % IPHONE_17_PRO_MAX_LENSES.length];
+}
+
+function randomizeExportMeta(meta, itemIndex = 0) {
+    if (!$('randomizeParams')?.checked) return meta;
+    const lens = pickLensProfile(itemIndex);
+    return {
+        ...meta,
+        lensModel: lens.lensModel,
+        fNumber: lens.fNumber,
+        exposureTime: randomizeShutter(meta.exposureTime, itemIndex),
+        iso: randomizeIso(meta.iso, itemIndex),
+        exposureBias: randomizeExposureBias(meta.exposureBias, itemIndex),
+        focalLength: lens.focalLength,
+        focalLength35: lens.focalLength35,
+    };
+}
+
 function fmtDt(v) {
     if (!v) return null;
     const d = new Date(v);
@@ -622,27 +695,27 @@ function fmtDt(v) {
     return `${d.getFullYear()}:${p(d.getMonth() + 1)}:${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-function buildExif(w, h) {
+function buildExif(w, h, meta = collectExportMeta()) {
     const ex = { '0th': {}, 'Exif': {}, 'GPS': {}, '1st': {}, 'Interop': {} };
     try {
-        const make = $('make').value.trim();
-        const model = $('model').value.trim();
-        const sw = $('software').value.trim();
-        const lens = $('lensModel').value.trim();
+        const make = meta.make || '';
+        const model = meta.model || '';
+        const sw = meta.software || '';
+        const lens = meta.lensModel || '';
 
         if (make) ex['0th'][piexif.ImageIFD.Make] = make;
         if (model) ex['0th'][piexif.ImageIFD.Model] = model;
         if (sw) ex['0th'][piexif.ImageIFD.Software] = sw;
 
-        const fn = rational($('fNumber').value);
+        const fn = rational(meta.fNumber);
         if (fn) ex['Exif'][piexif.ExifIFD.FNumber] = fn;
-        const et = parseShutter($('exposureTime').value);
+        const et = parseShutter(meta.exposureTime);
         if (et) ex['Exif'][piexif.ExifIFD.ExposureTime] = et;
-        const iso = $('iso').value;
+        const iso = meta.iso;
         if (iso) ex['Exif'][piexif.ExifIFD.ISOSpeedRatings] = +iso;
-        const fl = rational($('focalLength').value);
+        const fl = rational(meta.focalLength);
         if (fl) ex['Exif'][piexif.ExifIFD.FocalLength] = fl;
-        const fl35 = $('focalLength35').value;
+        const fl35 = meta.focalLength35;
         if (fl35) ex['Exif'][piexif.ExifIFD.FocalLengthIn35mmFilm] = +fl35;
         const flash = $('flash').value;
         if (flash !== '') ex['Exif'][piexif.ExifIFD.Flash] = +flash;
@@ -650,19 +723,21 @@ function buildExif(w, h) {
         if (mm !== '') ex['Exif'][piexif.ExifIFD.MeteringMode] = +mm;
         const wb = $('whiteBalance').value;
         if (wb !== '') ex['Exif'][piexif.ExifIFD.WhiteBalance] = +wb;
-        const bias = $('exposureBias').value;
+        const bias = meta.exposureBias;
         if (bias !== '') ex['Exif'][piexif.ExifIFD.ExposureBiasValue] = [Math.round(+bias * 100), 100];
         if (lens) ex['Exif'][piexif.ExifIFD.LensModel] = toExifStr(lens);
+        if (piexif.ExifIFD.CustomRendered) ex['Exif'][piexif.ExifIFD.CustomRendered] = 0;
+        if (piexif.ExifIFD.SceneCaptureType) ex['Exif'][piexif.ExifIFD.SceneCaptureType] = 0;
 
-        const dt = fmtDt(dtInput.value);
+        const dt = fmtDt(meta.dateTimeOriginal);
         if (dt) {
             ex['Exif'][piexif.ExifIFD.DateTimeOriginal] = dt;
             ex['Exif'][piexif.ExifIFD.DateTimeDigitized] = dt;
             ex['0th'][piexif.ImageIFD.DateTime] = dt;
         }
 
-        const cw = $('imageWidth').value;
-        const ch = $('imageHeight').value;
+        const cw = meta.imageWidth;
+        const ch = meta.imageHeight;
         const fw = cw ? +cw : w;
         const fh = ch ? +ch : h;
         if (fw && fh) {
@@ -816,6 +891,7 @@ function validateExportDimensions() {
 async function doExport() {
     if (!filesList.length) { showToast('请先选择图片', 'error'); return; }
     if (!validateExportDimensions()) return;
+    exportRandomSeed = Math.floor(Math.random() * 1000000);
     setLoading(true, '处理中...');
     processedBlobs = [];
     let fail = 0;
@@ -824,7 +900,7 @@ async function doExport() {
     for (let i = 0; i < filesList.length; i++) {
         setLoading(true, `处理中 ${i + 1}/${filesList.length}...`);
         try {
-            const blob = await processOne(filesList[i]);
+            const blob = await processOne(filesList[i], i);
             if (!blob || !blob.size) { fail++; continue; }
             const base = (filesList[i].sourceFile || filesList[i].file).name.replace(/\.[^.]+$/, '');
             const fileName = blob.fileName || `${base}_edited.${getOutputExt(filesList[i])}`;
@@ -863,8 +939,8 @@ function getOutputExt(item) {
     return 'jpg';
 }
 
-function collectExportMeta() {
-    return {
+function collectExportMeta(itemIndex = 0) {
+    return randomizeExportMeta({
         make: $('make').value.trim(),
         model: $('model').value.trim(),
         lensModel: $('lensModel').value.trim(),
@@ -880,27 +956,27 @@ function collectExportMeta() {
         lockAspect: isAspectLocked(),
         dateTimeOriginal: dtInput.value,
         quality: 95,
-    };
+    }, itemIndex);
 }
 
-async function processOne(item) {
+async function processOne(item, itemIndex = 0) {
     const format = $('outputFormat')?.value || 'jpeg';
     const wantsHeic = format === 'heif' || (format === 'same' && item.isHeif);
     if (backendCaps?.offline) {
         if (wantsHeic) throw new Error('静态前端暂不支持 HEIC 导出，请选择 JPEG');
-        return processOneClient(item);
+        return processOneClient(item, itemIndex);
     }
 
     try {
-        return await processOneBackend(item);
+        return await processOneBackend(item, itemIndex);
     } catch (e) {
         if (wantsHeic) throw e;
         console.warn('后端处理失败，回退到浏览器 JPEG 导出', e);
-        return processOneClient(item);
+        return processOneClient(item, itemIndex);
     }
 }
 
-async function processOneBackend(item) {
+async function processOneBackend(item, itemIndex = 0) {
     if (!verifiedCode) throw new Error('请先验证卡密');
     if (!deviceHashVal) deviceHashVal = await getDeviceHash();
 
@@ -909,7 +985,7 @@ async function processOneBackend(item) {
     body.append('code', verifiedCode);
     body.append('device_hash', deviceHashVal);
     body.append('format', $('outputFormat')?.value || 'jpeg');
-    body.append('meta', JSON.stringify(collectExportMeta()));
+    body.append('meta', JSON.stringify(collectExportMeta(itemIndex)));
 
     const res = await fetch('api/process', { method: 'POST', body });
     if (!res.ok) {
@@ -929,7 +1005,7 @@ async function processOneBackend(item) {
     return blob;
 }
 
-function processOneClient(item) {
+function processOneClient(item, itemIndex = 0) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
@@ -947,7 +1023,7 @@ function processOneClient(item) {
                 if (!jpg || jpg.length < 100) { reject(new Error('转换失败')); return; }
                 let blob;
                 try {
-                    const exif = buildExif(target.width, target.height);
+                    const exif = buildExif(target.width, target.height, collectExportMeta(itemIndex));
                     blob = dataUrlToBlob(piexif.insert(piexif.dump(exif), jpg));
                 } catch (e) {
                     console.warn('EXIF写入失败，使用原始JPEG', e);

@@ -242,6 +242,9 @@ function buildExifTags(meta, info) {
   const shutter = parseShutter(meta.exposureTime);
   if (shutter) tags.ExposureTime = shutter;
 
+  tags.CustomRendered = 'Normal';
+  tags.SceneCaptureType = 'Standard';
+
   const dt = formatExifDate(meta.dateTimeOriginal);
   if (dt) {
     tags.DateTimeOriginal = dt;
