@@ -120,9 +120,9 @@ let backendCaps = null;
 let exportRandomSeed = 0;
 
 const IPHONE_17_PRO_MAX_LENSES = [
-    { id: 'main', display: '主相机 — 24 mm ƒ1.78', exifLensModel: '主相机', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
-    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', exifLensModel: '超广角相机', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
-    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', exifLensModel: '长焦相机', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
+    { id: 'main', display: '主相机 — 24 mm ƒ1.78', focalLength: '6.86', focalLength35: '24', fNumber: '1.78' },
+    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', focalLength: '2.22', focalLength35: '13', fNumber: '2.2' },
+    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', focalLength: '15.66', focalLength35: '100', fNumber: '2.8' },
 ];
 
 /* ─── DOM ─── */
@@ -707,17 +707,11 @@ function pickLensProfile(index) {
 
 function randomizeExportMeta(meta, itemIndex = 0) {
     if (!$('randomizeParams')?.checked) return meta;
-    const lens = pickLensProfile(itemIndex);
     return {
         ...meta,
-        lensModel: lens.display,
-        exifLensModel: lens.exifLensModel,
-        fNumber: lens.fNumber,
         exposureTime: randomizeShutter(meta.exposureTime, itemIndex),
         iso: randomizeIso(meta.iso, itemIndex),
         exposureBias: randomizeExposureBias(meta.exposureBias, itemIndex),
-        focalLength: lens.focalLength,
-        focalLength35: lens.focalLength35,
     };
 }
 
@@ -735,7 +729,8 @@ function buildExif(w, h, meta = collectExportMeta()) {
         const make = meta.make || '';
         const model = meta.model || '';
         const sw = meta.software || '';
-        const lens = meta.exifLensModel || normalizeLensModelForExif(meta.lensModel);
+        const lens = meta.exifLensModel || meta.lensModel || '';
+        const fullLensLabel = hasFullLensLabel(lens);
 
         if (make) ex['0th'][piexif.ImageIFD.Make] = make;
         if (model) ex['0th'][piexif.ImageIFD.Model] = model;
@@ -980,7 +975,7 @@ function collectExportMeta(itemIndex = 0) {
         make: $('make').value.trim(),
         model: $('model').value.trim(),
         lensModel: $('lensModel').value.trim(),
-        exifLensModel: normalizeLensModelForExif($('lensModel').value),
+        exifLensModel: $('lensModel').value.trim(),
         software: $('software').value.trim(),
         fNumber: $('fNumber').value.trim(),
         exposureTime: $('exposureTime').value.trim(),

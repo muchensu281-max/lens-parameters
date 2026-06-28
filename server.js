@@ -242,7 +242,7 @@ function buildExifTags(meta, info) {
   if (meta.make) tags.Make = String(meta.make);
   if (meta.model) tags.Model = String(meta.model);
   if (meta.software) tags.Software = String(meta.software);
-  const lensModel = String(meta.exifLensModel || normalizeLensModelForExif(meta.lensModel)).trim();
+  const lensModel = String(meta.exifLensModel || meta.lensModel || '').trim();
   if (lensModel) tags.LensModel = lensModel;
 
   if (meta.fNumber) {
