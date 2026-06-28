@@ -119,6 +119,12 @@ let deviceHashVal = '';
 let backendCaps = null;
 let exportRandomSeed = 0;
 
+const IPHONE_17_PRO_MAX_LENSES = [
+    { id: 'main', display: '主相机 — 24 mm ƒ1.78', lensModel: '主相机', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
+    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', lensModel: '超广角相机', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
+    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', lensModel: '长焦相机', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
+];
+
 /* ─── DOM ─── */
 const $ = id => document.getElementById(id);
 const uploadWrapper = $('uploadWrapper');
@@ -146,6 +152,14 @@ const cardModal = $('cardModal');
 /* ─── 初始化 ─── */
 renderPresets();
 initBackendCapabilities();
+
+/* ─── 镜头档位 ─── */
+$('lensProfileGrid')?.addEventListener('click', e => {
+    const btn = e.target.closest('.lens-profile');
+    if (!btn) return;
+    applyLensProfile(btn.dataset.lens);
+});
+applyLensProfile('main', false);
 
 /* ─── 品牌Tab ─── */
 $('brandTabs').addEventListener('click', e => {
@@ -457,10 +471,6 @@ function renderPresets() {
 function applyPreset(p) {
     $('make').value = p.make || 'Apple';
     $('model').value = p.model;
-    $('lensModel').value = p.lens;
-    $('fNumber').value = p.f;
-    $('focalLength').value = p.focal;
-    $('focalLength35').value = p.focal35;
     $('software').value = p.sw || '18.3';
     $('iso').value = p.iso || '100';
     $('exposureTime').value = p.shutter || '1/100';
@@ -469,7 +479,20 @@ function applyPreset(p) {
     $('whiteBalance').value = '0';
     $('flash').value = '16';
     $('offsetTime').value = '+08:00';
+    applyLensProfile('main', false);
     showBubble();
+}
+
+function applyLensProfile(profileId, toastIt = true) {
+    const lens = IPHONE_17_PRO_MAX_LENSES.find(item => item.id === profileId) || IPHONE_17_PRO_MAX_LENSES[0];
+    document.querySelectorAll('.lens-profile').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lens === lens.id);
+    });
+    $('lensModel').value = lens.lensModel;
+    $('focalLength').value = lens.focalLength;
+    $('focalLength35').value = lens.focalLength35;
+    $('fNumber').value = lens.fNumber;
+    if (toastIt) showToast(`✓ ${lens.display}`, 'success');
 }
 
 function showBubble() {
@@ -667,12 +690,6 @@ function randomizeShutter(value, index) {
     const denom = denoms.reduce((best, cur) => Math.abs((1 / cur) - target) < Math.abs((1 / best) - target) ? cur : best, denoms[0]);
     return `1/${denom}`;
 }
-
-const IPHONE_17_PRO_MAX_LENSES = [
-    { lensModel: '主相机', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
-    { lensModel: '超广角相机', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
-    { lensModel: '长焦相机', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
-];
 
 function pickLensProfile(index) {
     return IPHONE_17_PRO_MAX_LENSES[Math.abs(exportRandomSeed + index) % IPHONE_17_PRO_MAX_LENSES.length];

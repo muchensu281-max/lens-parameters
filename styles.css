@@ -446,6 +446,27 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; }
 .form-select option { background:#1a0a2e;color:#fff; }
 .form-hint { font-size:11px;color:var(--text-ter);margin-top:6px;line-height:1.5; }
 
+.lens-profile-grid {
+    display:grid;grid-template-columns:1fr;gap:8px;
+}
+.lens-profile {
+    min-height:42px;padding:9px 12px;border-radius:10px;
+    border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.09);
+    color:rgba(255,255,255,0.80);font-size:13px;font-weight:750;font-family:inherit;
+    text-align:left;cursor:pointer;transition:all .20s ease;
+}
+.lens-profile:active { transform:scale(0.97); }
+.lens-profile.active {
+    background:rgba(255,107,157,0.38);
+    border-color:rgba(255,107,157,0.68);
+    color:#fff;
+    box-shadow:0 3px 12px rgba(255,107,157,0.22);
+}
+@media(min-width:520px) {
+    .lens-profile-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .lens-profile { text-align:center;font-size:12px;padding:9px 8px; }
+}
+
 .dt-wrap { position:relative; }
 .dt-placeholder {
     position:absolute;left:14px;top:50%;transform:translateY(-50%);
