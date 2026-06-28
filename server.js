@@ -210,6 +210,13 @@ function parseShutter(value) {
   return n < 1 ? `1/${Math.round(1 / n)}` : String(n);
 }
 
+function normalizeLensModelForExif(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+\d+(?:\.\d+)?\s*mm\s*[ƒfF]\s*\d+(?:\.\d+)?\s*$/u, '')
+    .trim();
+}
+
 function formatExifDate(value) {
   if (!value) return '';
   const date = new Date(value);
@@ -231,7 +238,8 @@ function buildExifTags(meta, info) {
   if (meta.make) tags.Make = String(meta.make);
   if (meta.model) tags.Model = String(meta.model);
   if (meta.software) tags.Software = String(meta.software);
-  if (meta.lensModel) tags.LensModel = String(meta.lensModel);
+  const lensModel = normalizeLensModelForExif(meta.lensModel);
+  if (lensModel) tags.LensModel = lensModel;
 
   if (meta.fNumber) {
     const fNumber = Number.parseFloat(meta.fNumber);

@@ -120,9 +120,9 @@ let backendCaps = null;
 let exportRandomSeed = 0;
 
 const IPHONE_17_PRO_MAX_LENSES = [
-    { id: 'main', display: '主相机 — 24 mm ƒ1.78', lensModel: '主相机 —', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
-    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', lensModel: '超广角相机 —', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
-    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', lensModel: '长焦相机 —', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
+    { id: 'main', display: '主相机 — 24 mm ƒ1.78', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
+    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
+    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
 ];
 
 /* ─── DOM ─── */
@@ -488,7 +488,7 @@ function applyLensProfile(profileId, toastIt = true) {
     document.querySelectorAll('.lens-profile').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.lens === lens.id);
     });
-    $('lensModel').value = lens.lensModel;
+    $('lensModel').value = lens.display;
     $('focalLength').value = lens.focalLength;
     $('focalLength35').value = lens.focalLength35;
     $('fNumber').value = lens.fNumber;
@@ -635,6 +635,12 @@ function apertureValue(s) {
     return [Math.round(Math.log2(n * n) * 100), 100];
 }
 
+function normalizeLensModelForExif(lensModel) {
+    const text = String(lensModel || '').trim();
+    if (!text) return '';
+    return text.replace(/\s+\d+(?:\.\d+)?\s*mm\s*[ƒfF]\s*\d+(?:\.\d+)?\s*$/u, '').trim();
+}
+
 function parseShutter(s) {
     if (!s) return null;
     const m = String(s).trim().match(/^(\d+)\s*\/\s*(\d+)$/);
@@ -700,7 +706,7 @@ function randomizeExportMeta(meta, itemIndex = 0) {
     const lens = pickLensProfile(itemIndex);
     return {
         ...meta,
-        lensModel: lens.lensModel,
+        lensModel: lens.display,
         fNumber: lens.fNumber,
         exposureTime: randomizeShutter(meta.exposureTime, itemIndex),
         iso: randomizeIso(meta.iso, itemIndex),
@@ -724,7 +730,7 @@ function buildExif(w, h, meta = collectExportMeta()) {
         const make = meta.make || '';
         const model = meta.model || '';
         const sw = meta.software || '';
-        const lens = meta.lensModel || '';
+        const lens = normalizeLensModelForExif(meta.lensModel);
 
         if (make) ex['0th'][piexif.ImageIFD.Make] = make;
         if (model) ex['0th'][piexif.ImageIFD.Model] = model;
