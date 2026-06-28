@@ -120,9 +120,9 @@ let backendCaps = null;
 let exportRandomSeed = 0;
 
 const IPHONE_17_PRO_MAX_LENSES = [
-    { id: 'main', display: '主相机 — 24 mm ƒ1.78', lensModel: '主相机 — 24 mm ƒ1.78', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
-    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', lensModel: '超广角相机 — 13 mm ƒ2.2', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
-    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', lensModel: '长焦相机 — 100 mm ƒ2.8', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
+    { id: 'main', display: '主相机 — 24 mm ƒ1.78', lensModel: '主相机 —', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
+    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', lensModel: '超广角相机 —', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
+    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', lensModel: '长焦相机 —', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
 ];
 
 /* ─── DOM ─── */
