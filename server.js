@@ -233,7 +233,11 @@ function buildExifTags(meta, info) {
   if (meta.software) tags.Software = String(meta.software);
   if (meta.lensModel) tags.LensModel = String(meta.lensModel);
 
-  if (meta.fNumber) tags.FNumber = Number.parseFloat(meta.fNumber);
+  if (meta.fNumber) {
+    const fNumber = Number.parseFloat(meta.fNumber);
+    tags.FNumber = fNumber;
+    if (Number.isFinite(fNumber) && fNumber > 0) tags.ApertureValue = Number((Math.log2(fNumber * fNumber)).toFixed(2));
+  }
   if (meta.iso) tags.ISO = Number.parseInt(meta.iso, 10);
   if (meta.focalLength) tags.FocalLength = Number.parseFloat(meta.focalLength);
   if (meta.focalLength35) tags.FocalLengthIn35mmFormat = Number.parseInt(meta.focalLength35, 10);

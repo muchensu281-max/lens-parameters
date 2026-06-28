@@ -606,6 +606,12 @@ function rational(s) {
     return isNaN(n) ? null : [Math.round(n * 100), 100];
 }
 
+function apertureValue(s) {
+    const n = parseFloat(String(s || ''));
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return [Math.round(Math.log2(n * n) * 100), 100];
+}
+
 function parseShutter(s) {
     if (!s) return null;
     const m = String(s).trim().match(/^(\d+)\s*\/\s*(\d+)$/);
@@ -663,9 +669,9 @@ function randomizeShutter(value, index) {
 }
 
 const IPHONE_17_PRO_MAX_LENSES = [
-    { lensModel: '主相机 — 24 mm ƒ1.78', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
-    { lensModel: '超广角相机 — 13 mm ƒ2.2', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
-    { lensModel: '长焦相机 — 100 mm ƒ2.8', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
+    { lensModel: '主相机', focalLength: '24', focalLength35: '24', fNumber: '1.78' },
+    { lensModel: '超广角相机', focalLength: '13', focalLength35: '13', fNumber: '2.2' },
+    { lensModel: '长焦相机', focalLength: '100', focalLength35: '100', fNumber: '2.8' },
 ];
 
 function pickLensProfile(index) {
@@ -709,6 +715,8 @@ function buildExif(w, h, meta = collectExportMeta()) {
 
         const fn = rational(meta.fNumber);
         if (fn) ex['Exif'][piexif.ExifIFD.FNumber] = fn;
+        const av = apertureValue(meta.fNumber);
+        if (av) ex['Exif'][piexif.ExifIFD.ApertureValue] = av;
         const et = parseShutter(meta.exposureTime);
         if (et) ex['Exif'][piexif.ExifIFD.ExposureTime] = et;
         const iso = meta.iso;
