@@ -119,12 +119,6 @@ let deviceHashVal = '';
 let backendCaps = null;
 let exportRandomSeed = 0;
 
-const IPHONE_17_PRO_MAX_LENSES = [
-    { id: 'main', display: '主相机 — 24 mm ƒ1.78', focalLength: '6.86', focalLength35: '24', fNumber: '1.78' },
-    { id: 'ultra', display: '超广角相机 — 13 mm ƒ2.2', focalLength: '2.22', focalLength35: '13', fNumber: '2.2' },
-    { id: 'tele', display: '长焦相机 — 100 mm ƒ2.8', focalLength: '15.66', focalLength35: '100', fNumber: '2.8' },
-];
-
 /* ─── DOM ─── */
 const $ = id => document.getElementById(id);
 const uploadWrapper = $('uploadWrapper');
@@ -152,14 +146,6 @@ const cardModal = $('cardModal');
 /* ─── 初始化 ─── */
 renderPresets();
 initBackendCapabilities();
-
-/* ─── 镜头档位 ─── */
-$('lensProfileGrid')?.addEventListener('click', e => {
-    const btn = e.target.closest('.lens-profile');
-    if (!btn) return;
-    applyLensProfile(btn.dataset.lens);
-});
-applyLensProfile('main', false);
 
 /* ─── 品牌Tab ─── */
 $('brandTabs').addEventListener('click', e => {
@@ -295,6 +281,10 @@ document.querySelectorAll('.contact-copy').forEach(card => {
             copy();
         }
     });
+});
+
+document.querySelectorAll('.camera-name-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyCameraName(btn));
 });
 
 function openCardModal() {
@@ -468,9 +458,32 @@ function renderPresets() {
     });
 }
 
+function applyCameraName(btn) {
+    const name = btn.dataset.cameraName || btn.textContent.trim();
+    const input = $('lensModel');
+    const current = input.value.trim() || input.placeholder || '';
+    const source = current || name;
+    const next = source.replace(
+        /(后置双广角摄像头|后置双摄像头|后置摄像头|后置主摄|主相机|超广角相机|长焦相机)(?:\s*[—-]\s*\d+(?:\.\d+)?\s*mm)?(?:\s*[ƒfF]\/?[\s\u2060]*\d+(?:\.\d+)?)?/u,
+        name
+    );
+    input.value = next === source && source !== name ? `${name} ${source}` : next;
+    if (btn.dataset.focal) $('focalLength').value = btn.dataset.focal;
+    if (btn.dataset.focal35) $('focalLength35').value = btn.dataset.focal35;
+    if (btn.dataset.fnumber) $('fNumber').value = btn.dataset.fnumber;
+    document.querySelectorAll('.camera-name-btn').forEach(btn => {
+        btn.classList.toggle('active', (btn.dataset.cameraName || btn.textContent.trim()) === name);
+    });
+    showToast(`✓ ${name}`, 'success');
+}
+
 function applyPreset(p) {
     $('make').value = p.make || 'Apple';
     $('model').value = p.model;
+    $('lensModel').value = p.lens;
+    $('fNumber').value = p.f;
+    $('focalLength').value = p.focal;
+    $('focalLength35').value = p.focal35;
     $('software').value = p.sw || '18.3';
     $('iso').value = p.iso || '100';
     $('exposureTime').value = p.shutter || '1/100';
@@ -479,20 +492,7 @@ function applyPreset(p) {
     $('whiteBalance').value = '0';
     $('flash').value = '16';
     $('offsetTime').value = '+08:00';
-    applyLensProfile('main', false);
     showBubble();
-}
-
-function applyLensProfile(profileId, toastIt = true) {
-    const lens = IPHONE_17_PRO_MAX_LENSES.find(item => item.id === profileId) || IPHONE_17_PRO_MAX_LENSES[0];
-    document.querySelectorAll('.lens-profile').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.lens === lens.id);
-    });
-    $('lensModel').value = lens.display;
-    $('focalLength').value = lens.focalLength;
-    $('focalLength35').value = lens.focalLength35;
-    $('fNumber').value = lens.fNumber;
-    if (toastIt) showToast(`✓ ${lens.display}`, 'success');
 }
 
 function showBubble() {
@@ -629,22 +629,6 @@ function rational(s) {
     return isNaN(n) ? null : [Math.round(n * 100), 100];
 }
 
-function apertureValue(s) {
-    const n = parseFloat(String(s || ''));
-    if (!Number.isFinite(n) || n <= 0) return null;
-    return [Math.round(Math.log2(n * n) * 100), 100];
-}
-
-function normalizeLensModelForExif(lensModel) {
-    const text = String(lensModel || '').trim();
-    if (!text) return '';
-    return text.replace(/\s+\d+(?:\.\d+)?\s*mm\s*[ƒfF]\s*\d+(?:\.\d+)?\s*$/u, '').trim();
-}
-
-function hasFullLensLabel(lensModel) {
-    return /\d+(?:\.\d+)?\s*mm\s*[ƒfF]\s*\d+(?:\.\d+)?\s*$/u.test(String(lensModel || ''));
-}
-
 function parseShutter(s) {
     if (!s) return null;
     const m = String(s).trim().match(/^(\d+)\s*\/\s*(\d+)$/);
@@ -655,58 +639,45 @@ function parseShutter(s) {
 }
 
 function parseShutterSeconds(value) {
-    const r = parseShutter(value);
-    if (!r) return 0;
-    return r[0] / r[1];
+    const parsed = parseShutter(value);
+    if (!parsed) return 1 / 120;
+    return parsed[0] / parsed[1];
 }
 
-function cleanNumber(n, digits = 2) {
-    if (!Number.isFinite(n)) return '';
+function cleanNumber(n, digits = 1) {
+    if (!Number.isFinite(n)) return '0';
     return String(Number(n.toFixed(digits)));
 }
 
-function clamp(n, min, max) {
-    return Math.min(max, Math.max(min, n));
-}
-
-function pickVariant(values, baseValue, index, salt = 0) {
-    if (!values.length) return baseValue;
-    const start = Math.abs(exportRandomSeed + index * 17 + salt) % values.length;
-    let picked = values[start];
-    if (values.length > 1 && picked === baseValue) picked = values[(start + 1) % values.length];
-    return picked;
+function pickVariant(values, index, salt = 0) {
+    return values[Math.abs(exportRandomSeed + index * 17 + salt) % values.length];
 }
 
 function randomizeIso(value, index) {
     const base = Math.max(32, parseInt(value, 10) || 100);
-    const standard = [32, 40, 50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200];
-    const near = standard.filter(v => v >= base * 0.45 && v <= base * 2.3);
-    return String(pickVariant(near.length ? near : standard, base, index, 11));
+    const all = [32, 40, 50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600];
+    const near = all.filter(v => v >= base * 0.45 && v <= base * 2.2);
+    const pool = near.length >= 3 ? near : all;
+    return String(pickVariant(pool, index, 11));
+}
+
+function randomizeShutter(value, index) {
+    const baseSeconds = parseShutterSeconds(value);
+    const factors = [0.55, 0.7, 0.85, 1, 1.2, 1.45, 1.7];
+    const target = baseSeconds * pickVariant(factors, index, 29);
+    const denoms = [30, 40, 50, 60, 80, 100, 120, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000];
+    const denom = denoms.reduce((best, cur) => Math.abs((1 / cur) - target) < Math.abs((1 / best) - target) ? cur : best, denoms[0]);
+    return `1/${denom}`;
 }
 
 function randomizeExposureBias(value, index) {
     const base = parseFloat(value);
     const center = Number.isFinite(base) ? base : 0;
-    const variants = [-0.7, -0.3, 0, 0.3, 0.7]
-        .map(delta => cleanNumber(clamp(center + delta, -2, 2), 1));
-    return pickVariant([...new Set(variants)], cleanNumber(center, 1), index, 53);
+    const delta = pickVariant([-0.7, -0.3, 0, 0.3, 0.7], index, 47);
+    return cleanNumber(Math.max(-2, Math.min(2, center + delta)), 1);
 }
 
-function randomizeShutter(value, index) {
-    const baseSeconds = parseShutterSeconds(value) || 1 / 100;
-    const factors = [0.55, 0.7, 0.85, 1, 1.2, 1.45, 1.7];
-    const target = baseSeconds * factors[Math.abs(exportRandomSeed + index * 17 + 67) % factors.length];
-    const denoms = [15, 20, 25, 30, 33, 40, 50, 60, 80, 100, 120, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000];
-    const denom = denoms.reduce((best, cur) => Math.abs((1 / cur) - target) < Math.abs((1 / best) - target) ? cur : best, denoms[0]);
-    return `1/${denom}`;
-}
-
-function pickLensProfile(index) {
-    return IPHONE_17_PRO_MAX_LENSES[Math.abs(exportRandomSeed + index) % IPHONE_17_PRO_MAX_LENSES.length];
-}
-
-function randomizeExportMeta(meta, itemIndex = 0) {
-    if (!$('randomizeParams')?.checked) return meta;
+function randomizeShootingMeta(meta, itemIndex = 0) {
     return {
         ...meta,
         exposureTime: randomizeShutter(meta.exposureTime, itemIndex),
@@ -729,8 +700,7 @@ function buildExif(w, h, meta = collectExportMeta()) {
         const make = meta.make || '';
         const model = meta.model || '';
         const sw = meta.software || '';
-        const lens = meta.exifLensModel || meta.lensModel || '';
-        const fullLensLabel = hasFullLensLabel(lens);
+        const lens = meta.lensModel || '';
 
         if (make) ex['0th'][piexif.ImageIFD.Make] = make;
         if (model) ex['0th'][piexif.ImageIFD.Model] = model;
@@ -738,8 +708,6 @@ function buildExif(w, h, meta = collectExportMeta()) {
 
         const fn = rational(meta.fNumber);
         if (fn) ex['Exif'][piexif.ExifIFD.FNumber] = fn;
-        const av = apertureValue(meta.fNumber);
-        if (av) ex['Exif'][piexif.ExifIFD.ApertureValue] = av;
         const et = parseShutter(meta.exposureTime);
         if (et) ex['Exif'][piexif.ExifIFD.ExposureTime] = et;
         const iso = meta.iso;
@@ -757,8 +725,6 @@ function buildExif(w, h, meta = collectExportMeta()) {
         const bias = meta.exposureBias;
         if (bias !== '') ex['Exif'][piexif.ExifIFD.ExposureBiasValue] = [Math.round(+bias * 100), 100];
         if (lens) ex['Exif'][piexif.ExifIFD.LensModel] = toExifStr(lens);
-        if (piexif.ExifIFD.CustomRendered) ex['Exif'][piexif.ExifIFD.CustomRendered] = 0;
-        if (piexif.ExifIFD.SceneCaptureType) ex['Exif'][piexif.ExifIFD.SceneCaptureType] = 0;
 
         const dt = fmtDt(meta.dateTimeOriginal);
         if (dt) {
@@ -971,11 +937,10 @@ function getOutputExt(item) {
 }
 
 function collectExportMeta(itemIndex = 0) {
-    return randomizeExportMeta({
+    return randomizeShootingMeta({
         make: $('make').value.trim(),
         model: $('model').value.trim(),
         lensModel: $('lensModel').value.trim(),
-        exifLensModel: $('lensModel').value.trim(),
         software: $('software').value.trim(),
         fNumber: $('fNumber').value.trim(),
         exposureTime: $('exposureTime').value.trim(),

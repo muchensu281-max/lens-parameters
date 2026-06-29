@@ -10,7 +10,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Lens Parameters</title>
     <link rel="icon" type="image/jpeg" href="http://q.qlogo.cn/headimg_dl?dst_uin=156440000&spec=640&img_type=jpg">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260629-fsymbol-fix">
 </head>
 <body>
 
@@ -122,7 +122,7 @@
                                  12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8
                                  8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0
                                  10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
-                    </svg>镜头与拍摄参数
+                    </svg>镜头与焦距
                 </div>
                 <svg class="card-arrow" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
             </div>
@@ -137,27 +137,38 @@
                         <input type="text" class="form-input" id="model" placeholder="iPhone 16 Pro">
                     </div>
                     <div class="form-group col-full">
-                        <label class="form-label">镜头档位</label>
-                        <div class="lens-profile-grid" id="lensProfileGrid">
-                            <button type="button" class="lens-profile active" data-lens="main">主相机 — 24 mm ƒ1.78</button>
-                            <button type="button" class="lens-profile" data-lens="ultra">超广角相机 — 13 mm ƒ2.2</button>
-                            <button type="button" class="lens-profile" data-lens="tele">长焦相机 — 100 mm ƒ2.8</button>
-                        </div>
-                    </div>
-                    <div class="form-group col-full">
                         <label class="form-label">镜头型号</label>
                         <input type="text" class="form-input" id="lensModel"
-                               placeholder="iPhone 16 Pro 后置摄像头 — 6.86mm f/1.78">
+                               placeholder="iPhone 16 Pro 主相机 — 24 mm ƒ⁠1.78">
+                        <div class="camera-name-grid">
+                            <button type="button" class="camera-name-btn" data-camera-name="主相机 — 24 mm ƒ⁠1.78" data-focal="24" data-focal35="24" data-fnumber="1.78">主相机 — 24 mm ƒ⁠1.78</button>
+                            <button type="button" class="camera-name-btn" data-camera-name="超广角相机 — 13 mm ƒ⁠2.2" data-focal="13" data-focal35="13" data-fnumber="2.2">超广角相机 — 13 mm ƒ⁠2.2</button>
+                            <button type="button" class="camera-name-btn" data-camera-name="长焦相机 — 100 mm ƒ⁠2.8" data-focal="100" data-focal35="100" data-fnumber="2.8">长焦相机 — 100 mm ƒ⁠2.8</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">焦距 mm</label>
-                        <input type="text" class="form-input" id="focalLength" placeholder="6.86">
+                        <input type="text" class="form-input" id="focalLength" placeholder="24">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group is-hidden">
                         <label class="form-label">35mm 等效焦距</label>
                         <input type="text" class="form-input" id="focalLength35" placeholder="24">
-                    </div>
-                    <div class="form-group">
+                    </div></div>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg class="card-icon" viewBox="0 0 24 24">
+                        <path d="M9 4v3h5v12h3V7h5V4H9zm-6 8h3v7h3v-7h3V9H3v3z"/>
+                    </svg>拍摄参数
+                </div>
+                <svg class="card-arrow" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div class="form-group is-hidden">
                         <label class="form-label">光圈 f/</label>
                         <input type="text" class="form-input" id="fNumber" placeholder="1.78">
                     </div>
@@ -172,15 +183,7 @@
                     <div class="form-group">
                         <label class="form-label">曝光补偿</label>
                         <input type="text" class="form-input" id="exposureBias" placeholder="0">
-                    </div>
-                    <div class="param-random-row col-full">
-                        <label class="res-lock param-random">
-                            <input type="checkbox" id="randomizeParams" checked>
-                            <span>随机拍摄参数</span>
-                        </label>
-                        <div class="form-hint">开启后，只随机 ISO、快门和曝光补偿；镜头按上面选择的档位导出。</div>
-                    </div>
-                </div>
+                    </div></div>
             </div>
         </div>
 
@@ -333,7 +336,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.min.js?v=20260209"></script>
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js?v=20260209"></script>
-<script src="js/cards.js?v=20260629-physical-focal-test"></script>
-<script src="js/main.js?v=20260629-physical-focal-test"></script>
+<script src="js/cards.js?v=20260620-card-copy-check"></script>
+<script src="js/main.js?v=20260629-fsymbol-fix"></script>
 </body>
 </html>

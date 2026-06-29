@@ -210,17 +210,6 @@ function parseShutter(value) {
   return n < 1 ? `1/${Math.round(1 / n)}` : String(n);
 }
 
-function normalizeLensModelForExif(value) {
-  return String(value || '')
-    .trim()
-    .replace(/\s+\d+(?:\.\d+)?\s*mm\s*[ƒfF]\s*\d+(?:\.\d+)?\s*$/u, '')
-    .trim();
-}
-
-function hasFullLensLabel(value) {
-  return /\d+(?:\.\d+)?\s*mm\s*[ƒfF]\s*\d+(?:\.\d+)?\s*$/u.test(String(value || ''));
-}
-
 function formatExifDate(value) {
   if (!value) return '';
   const date = new Date(value);
@@ -242,14 +231,9 @@ function buildExifTags(meta, info) {
   if (meta.make) tags.Make = String(meta.make);
   if (meta.model) tags.Model = String(meta.model);
   if (meta.software) tags.Software = String(meta.software);
-  const lensModel = String(meta.exifLensModel || meta.lensModel || '').trim();
-  if (lensModel) tags.LensModel = lensModel;
+  if (meta.lensModel) tags.LensModel = String(meta.lensModel);
 
-  if (meta.fNumber) {
-    const fNumber = Number.parseFloat(meta.fNumber);
-    tags.FNumber = fNumber;
-    if (Number.isFinite(fNumber) && fNumber > 0) tags.ApertureValue = Number((Math.log2(fNumber * fNumber)).toFixed(2));
-  }
+  if (meta.fNumber) tags.FNumber = Number.parseFloat(meta.fNumber);
   if (meta.iso) tags.ISO = Number.parseInt(meta.iso, 10);
   if (meta.focalLength) tags.FocalLength = Number.parseFloat(meta.focalLength);
   if (meta.focalLength35) tags.FocalLengthIn35mmFormat = Number.parseInt(meta.focalLength35, 10);
@@ -257,9 +241,6 @@ function buildExifTags(meta, info) {
 
   const shutter = parseShutter(meta.exposureTime);
   if (shutter) tags.ExposureTime = shutter;
-
-  tags.CustomRendered = 'Normal';
-  tags.SceneCaptureType = 'Standard';
 
   const dt = formatExifDate(meta.dateTimeOriginal);
   if (dt) {
