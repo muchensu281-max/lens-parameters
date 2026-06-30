@@ -119,6 +119,36 @@ let deviceHashVal = '';
 let backendCaps = null;
 let exportRandomSeed = 0;
 
+const CAMERA_LENS_PROFILES = [
+    {
+        key: 'main',
+        display: '主相机 — 24 mm ƒ1.78',
+        rawLabel: '后置摄像头',
+        physicalFocal: '6.86',
+        equivalentFocal: '24',
+        fNumber: '1.78',
+        match: ['主相机', '后置摄像头', '24 mm', '24mm'],
+    },
+    {
+        key: 'ultra',
+        display: '超广角相机 — 13 mm ƒ2.2',
+        rawLabel: '后置超广角摄像头',
+        physicalFocal: '2.22',
+        equivalentFocal: '13',
+        fNumber: '2.2',
+        match: ['超广角', '后置超广角摄像头', '13 mm', '13mm'],
+    },
+    {
+        key: 'tele',
+        display: '长焦相机 — 100 mm ƒ2.8',
+        rawLabel: '后置长焦摄像头',
+        physicalFocal: '15.66',
+        equivalentFocal: '100',
+        fNumber: '2.8',
+        match: ['长焦', '后置长焦摄像头', '100 mm', '100mm'],
+    },
+];
+
 /* ─── DOM ─── */
 const $ = id => document.getElementById(id);
 const uploadWrapper = $('uploadWrapper');
@@ -458,21 +488,36 @@ function renderPresets() {
     });
 }
 
-function applyCameraName(btn) {
+function rawLensModel(profile, model) {
+    const deviceModel = String(model || '').trim() || 'iPhone 17 Pro Max';
+    return `${deviceModel} ${profile.rawLabel} — ${profile.physicalFocal}mm f/${profile.fNumber}`;
+}
+
+function cameraProfileFromButton(btn) {
     const name = btn.dataset.cameraName || btn.textContent.trim();
-    const input = $('lensModel');
-    const current = input.value.trim() || input.placeholder || '';
-    const source = current || name;
-    const next = source.replace(
-        /(后置双广角摄像头|后置双摄像头|后置摄像头|后置主摄|主相机|超广角相机|长焦相机)(?:\s*[—-]\s*\d+(?:\.\d+)?\s*mm)?(?:\s*[ƒfF]\/?[\s\u2060]*\d+(?:\.\d+)?)?/u,
-        name
-    );
-    input.value = next === source && source !== name ? `${name} ${source}` : next;
-    if (btn.dataset.focal) $('focalLength').value = btn.dataset.focal;
-    if (btn.dataset.focal35) $('focalLength35').value = btn.dataset.focal35;
-    if (btn.dataset.fnumber) $('fNumber').value = btn.dataset.fnumber;
+    return CAMERA_LENS_PROFILES.find(profile => profile.display === name || profile.rawLabel === btn.dataset.lensLabel)
+        || CAMERA_LENS_PROFILES.find(profile => profile.match.some(token => name.includes(token)));
+}
+
+function applyCameraName(btn) {
+    const profile = cameraProfileFromButton(btn);
+    const name = profile?.display || btn.dataset.cameraName || btn.textContent.trim();
+    const model = $('model').value.trim() || 'iPhone 17 Pro Max';
+    if (profile) {
+        $('focalLength').value = profile.physicalFocal;
+        $('focalLength35').value = profile.equivalentFocal;
+        $('fNumber').value = profile.fNumber;
+        $('lensModel').value = rawLensModel(profile, model);
+    } else {
+        const lensLabel = btn.dataset.lensLabel || '后置摄像头';
+        if (btn.dataset.focal) $('focalLength').value = btn.dataset.focal;
+        if (btn.dataset.focal35) $('focalLength35').value = btn.dataset.focal35;
+        if (btn.dataset.fnumber) $('fNumber').value = btn.dataset.fnumber;
+        $('lensModel').value = `${model} ${lensLabel} — ${$('focalLength').value}mm f/${$('fNumber').value}`;
+    }
     document.querySelectorAll('.camera-name-btn').forEach(btn => {
-        btn.classList.toggle('active', (btn.dataset.cameraName || btn.textContent.trim()) === name);
+        const btnProfile = cameraProfileFromButton(btn);
+        btn.classList.toggle('active', btnProfile ? btnProfile.key === profile?.key : (btn.dataset.cameraName || btn.textContent.trim()) === name);
     });
     showToast(`✓ ${name}`, 'success');
 }
@@ -677,12 +722,44 @@ function randomizeExposureBias(value, index) {
     return cleanNumber(Math.max(-2, Math.min(2, center + delta)), 1);
 }
 
-function randomizeShootingMeta(meta, itemIndex = 0) {
+function isAppleCameraMeta(meta) {
+    const text = `${meta.make || ''} ${meta.model || ''} ${meta.lensModel || ''}`;
+    return /Apple|iPhone|iPad/i.test(text);
+}
+
+function cameraProfileFromMeta(meta) {
+    if (!isAppleCameraMeta(meta)) return null;
+    const lens = String(meta.lensModel || '');
+    const activeBtn = document.querySelector('.camera-name-btn.active');
+    const activeProfile = activeBtn ? cameraProfileFromButton(activeBtn) : null;
+    if (activeProfile) return activeProfile;
+
+    const normalizedLens = lens.replace(/\s+/g, ' ');
+    return CAMERA_LENS_PROFILES.find(profile => profile.match.some(token => normalizedLens.includes(token)))
+        || CAMERA_LENS_PROFILES.find(profile => String(meta.focalLength35 || '').trim() === profile.equivalentFocal)
+        || null;
+}
+
+function normalizeCameraMeta(meta) {
+    const profile = cameraProfileFromMeta(meta);
+    if (!profile) return meta;
     return {
         ...meta,
-        exposureTime: randomizeShutter(meta.exposureTime, itemIndex),
-        iso: randomizeIso(meta.iso, itemIndex),
-        exposureBias: randomizeExposureBias(meta.exposureBias, itemIndex),
+        lensMake: meta.make || 'Apple',
+        lensModel: rawLensModel(profile, meta.model),
+        fNumber: profile.fNumber,
+        focalLength: profile.physicalFocal,
+        focalLength35: profile.equivalentFocal,
+    };
+}
+
+function randomizeShootingMeta(meta, itemIndex = 0) {
+    const normalized = normalizeCameraMeta(meta);
+    return {
+        ...normalized,
+        exposureTime: randomizeShutter(normalized.exposureTime, itemIndex),
+        iso: randomizeIso(normalized.iso, itemIndex),
+        exposureBias: randomizeExposureBias(normalized.exposureBias, itemIndex),
     };
 }
 
@@ -701,6 +778,9 @@ function buildExif(w, h, meta = collectExportMeta()) {
         const model = meta.model || '';
         const sw = meta.software || '';
         const lens = meta.lensModel || '';
+        const lensMake = meta.lensMake || make;
+        const lensMakeTag = piexif.ExifIFD.LensMake || 42035;
+        const lensModelTag = piexif.ExifIFD.LensModel || 42036;
 
         if (make) ex['0th'][piexif.ImageIFD.Make] = make;
         if (model) ex['0th'][piexif.ImageIFD.Model] = model;
@@ -724,7 +804,8 @@ function buildExif(w, h, meta = collectExportMeta()) {
         if (wb !== '') ex['Exif'][piexif.ExifIFD.WhiteBalance] = +wb;
         const bias = meta.exposureBias;
         if (bias !== '') ex['Exif'][piexif.ExifIFD.ExposureBiasValue] = [Math.round(+bias * 100), 100];
-        if (lens) ex['Exif'][piexif.ExifIFD.LensModel] = toExifStr(lens);
+        if (lensMake) ex['Exif'][lensMakeTag] = toExifStr(lensMake);
+        if (lens) ex['Exif'][lensModelTag] = toExifStr(lens);
 
         const dt = fmtDt(meta.dateTimeOriginal);
         if (dt) {

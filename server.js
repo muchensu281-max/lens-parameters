@@ -231,6 +231,7 @@ function buildExifTags(meta, info) {
   if (meta.make) tags.Make = String(meta.make);
   if (meta.model) tags.Model = String(meta.model);
   if (meta.software) tags.Software = String(meta.software);
+  if (meta.lensMake || meta.make) tags.LensMake = String(meta.lensMake || meta.make);
   if (meta.lensModel) tags.LensModel = String(meta.lensModel);
 
   if (meta.fNumber) tags.FNumber = Number.parseFloat(meta.fNumber);
