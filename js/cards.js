@@ -1747,6 +1747,86 @@ window.LENS_CARD_CONFIG = {
     "note": "永久卡",
     "createdAt": "2026-06-20T04:33:40.490Z",
     "durationDays": 0
+  },
+  {
+    "hash": "1662948dee913adabecfa1f20ee5d29767c217bee52a1dfade12bedf81128f74",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "af074a55e05dca20468ae14670ffd3c988dfd2caf250f7fd63edb5999cf24513",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "0a29d822275f2d47fb17e93b498d27de33aab16584f5b895813820992b9b1a10",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "d0eefb9694ed0344f8c5720febfe8e2a33b452a83638c66ef2703297c90ddba8",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "77c4d69dbf4c05dd7e37ff578c87654a5513aaddd535f0125f38145fb7067bf9",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "993de91a834945168e43808f8f16770232c2850417575396be58e491d015ece6",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "14d7cc4584036c8dbbbde6fc431006a74184337e7c6235596de65bc6b7dcfe16",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "56e57a8a5137d3a1ec4b64e74816d3d0ee3c4782df7a93935a3b178e0fb48685",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "f9f0d63aad7e4b9035d234cdcaeee05c21de0b860a9811ed6c412af479c764e5",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
+  },
+  {
+    "hash": "aa408c3496ec7e895f4bd2c131fc048c58cc88d13e3451ddaf206e5383100677",
+    "type": "permanent",
+    "durationDays": 0,
+    "expiresAt": "",
+    "note": "永久卡-20260708",
+    "createdAt": "2026-07-07T23:16:05.775Z"
   }
 ]
 };

@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "cards": "node scripts/generate-cards.js",
-    "test": "node --check server.js && node --check js/main.js && node --check admin.js && node --check scripts/generate-cards.js",
+    "test": "node --check server.js && node --check js/main.js && node --check js/video.js && node --check admin.js && node --check scripts/generate-cards.js",
     "start": "node server.js"
   },
   "keywords": [],
