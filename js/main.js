@@ -262,13 +262,9 @@ $('cardModalClose').addEventListener('click', () => cardModal.classList.remove('
 cardModal.addEventListener('click', e => { if (e.target === cardModal) cardModal.classList.remove('active'); });
 
 $('cardInput').addEventListener('input', function () {
-    let v = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-    let formatted = '';
-    for (let i = 0; i < Math.min(v.length, 16); i++) {
-        if (i > 0 && i % 4 === 0) formatted += '-';
-        formatted += v[i];
-    }
-    this.value = formatted;this.style.borderColor = '';$('cardErrMsg').textContent = '';
+    this.value = this.value.trim();
+    this.style.borderColor = '';
+    $('cardErrMsg').textContent = '';
 });
 
 $('cardInput').addEventListener('keydown', e => {
@@ -291,7 +287,6 @@ async function confirmCard() {
     const btn = $('cardConfirmBtn');
 
     if (!code) { errEl.textContent = '请输入卡密'; return; }
-    if (code.length < 19) { errEl.textContent = '卡密格式不完整，应为XXXX-XXXX-XXXX-XXXX'; return; }
 
     btn.disabled = true;
     btn.textContent = '验证中...';
@@ -322,8 +317,7 @@ async function silentVerify(code) {
 }
 
 function normalizeCardCode(code) {
-    const raw = String(code || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16);
-    return raw.match(/.{1,4}/g)?.join('-') || '';
+    return String(code || '').trim().toUpperCase();
 }
 
 async function sha256Hex(text) {
