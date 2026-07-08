@@ -496,6 +496,28 @@ async function probeVideoInfo(file) {
   }
 }
 
+async function probeFirstSupportedAudioMap(file) {
+  if (!runtimeCaps.ffprobe) return '0:a:0?';
+  try {
+    const json = await runCommandOutput(runtimeCaps.ffprobePath || 'ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'stream=index,codec_type,codec_name',
+      '-of', 'json',
+      file,
+    ]);
+    const parsed = JSON.parse(json);
+    const supported = new Set(['aac', 'mp3', 'alac', 'pcm_s16le', 'pcm_s24le', 'pcm_s32le']);
+    const stream = (parsed.streams || []).find(item => (
+      item.codec_type === 'audio'
+      && supported.has(String(item.codec_name || '').toLowerCase())
+      && Number.isInteger(item.index)
+    ));
+    return stream ? `0:${stream.index}` : '';
+  } catch {
+    return '0:a:0?';
+  }
+}
+
 function videoLensProfile(value) {
   const key = String(value || 'main');
   const profiles = {
@@ -635,19 +657,18 @@ async function renderVideo(file, meta) {
     const videoArgs = meta.codec === 'hevc'
       ? ['-c:v', 'libx265', '-tag:v', 'hvc1', '-preset', 'fast', '-b:v', `${bitrate}k`, '-maxrate', `${maxrate}k`, '-bufsize', `${bufsize}k`, '-pix_fmt', 'yuv420p']
       : ['-c:v', 'libx264', '-preset', 'fast', '-b:v', `${bitrate}k`, '-maxrate', `${maxrate}k`, '-bufsize', `${bufsize}k`, '-pix_fmt', 'yuv420p'];
+    const audioMap = await probeFirstSupportedAudioMap(input);
+    const audioArgs = audioMap ? ['-map', audioMap, '-c:a', 'aac', '-b:a', '128k', '-shortest'] : [];
     const createdAt = formatIsoDate(meta.dateTimeOriginal);
     const args = [
       '-y',
       '-i', input,
       '-map', '0:v:0',
-      '-map', '0:a?',
       '-vf', scaleFilter,
       ...videoArgs,
       '-metadata:s:v:0', 'handler_name=Core Media Video',
       '-metadata:s:v:0', `encoder=${meta.make} ${meta.model}`,
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-shortest',
+      ...audioArgs,
       '-movflags', '+faststart',
     ];
     if (createdAt) args.push('-metadata', `creation_time=${createdAt}`);
