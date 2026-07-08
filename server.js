@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { spawn, execFile } = require('child_process');
 const express = require('express');
 const multer = require('multer');
 const sharp = require('sharp');
@@ -28,6 +29,15 @@ const upload = multer({
   },
 });
 
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 1,
+    fileSize: 1024 * 1024 * 1024,
+    fieldSize: 1024 * 1024,
+  },
+});
+
 const runtimeCaps = {
   heifRead: Boolean(sharp.versions.heif),
   heifHevcWrite: false,
@@ -35,6 +45,10 @@ const runtimeCaps = {
   exiftool: true,
   sharp: sharp.versions.sharp,
   vips: sharp.versions.vips,
+  ffmpeg: false,
+  ffmpegPath: '',
+  ffprobe: false,
+  ffprobePath: '',
 };
 
 app.use(express.json({ limit: '1mb' }));
@@ -63,6 +77,44 @@ function maskCode(code) {
 function randomCode(prefix = 'LENS') {
   const bytes = crypto.randomBytes(10).toString('hex').toUpperCase();
   return `${prefix}-${bytes.slice(0, 4)}-${bytes.slice(4, 8)}-${bytes.slice(8, 12)}-${bytes.slice(12, 16)}`;
+}
+
+const lensTextMap = {
+  main: '主相机 — 24 mm f/1.78',
+  ultra: '超广角 — 13 mm f/2.2',
+  tele: '长焦 — 100 mm f/2.8',
+};
+
+async function detectFfmpeg() {
+  const findCmd = process.platform === 'win32' ? 'where' : 'which';
+
+  try {
+    const out = await new Promise((resolve, reject) => {
+      execFile(findCmd, ['ffmpeg'], (err, stdout) => {
+        if (err) reject(err);
+        else resolve(stdout.trim());
+      });
+    });
+    runtimeCaps.ffmpeg = true;
+    runtimeCaps.ffmpegPath = out;
+  } catch {
+    runtimeCaps.ffmpeg = false;
+    runtimeCaps.ffmpegPath = '';
+  }
+
+  try {
+    const out = await new Promise((resolve, reject) => {
+      execFile(findCmd, ['ffprobe'], (err, stdout) => {
+        if (err) reject(err);
+        else resolve(stdout.trim());
+      });
+    });
+    runtimeCaps.ffprobe = true;
+    runtimeCaps.ffprobePath = out;
+  } catch {
+    runtimeCaps.ffprobe = false;
+    runtimeCaps.ffprobePath = '';
+  }
 }
 
 async function ensureDataFiles() {
@@ -313,8 +365,116 @@ async function renderImage(file, meta, requestedFormat) {
   };
 }
 
+/* ─── 视频处理 ─── */
+
+function buildVideoFfmpegArgs(inputPath, outputPath, meta) {
+  const args = ['-y', '-i', inputPath];
+  const w = toPositiveInt(meta.width) || 1080;
+  const h = toPositiveInt(meta.height) || 1920;
+  const fps = Math.max(1, Math.min(120, toPositiveInt(meta.fps) || 60));
+
+  if (meta.codec === 'hevc') {
+    args.push('-c:v', 'libx265', '-tag:v', 'hvc1', '-crf', '23');
+  } else {
+    args.push('-c:v', 'libx264', '-crf', '23');
+  }
+
+  args.push('-c:a', 'aac', '-b:a', '128k');
+  args.push('-r', String(fps));
+
+  const fit = meta.fit || 'preserve';
+  if (fit === 'stretch') {
+    args.push('-vf', `scale=${w}:${h}:force_original_aspect_ratio=disable`);
+  } else if (fit === 'contain') {
+    args.push('-vf', `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`);
+  } else if (fit === 'cover') {
+    args.push('-vf', `scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h}`);
+  } else {
+    args.push('-vf', `scale=${w}:${h}:force_original_aspect_ratio=decrease`);
+  }
+
+  if (meta.model) {
+    args.push('-metadata', `make=Apple`);
+    args.push('-metadata', `model=${meta.model}`);
+  }
+
+  const lensLabel = lensTextMap[meta.lens];
+  if (lensLabel) {
+    args.push('-metadata', `comment=${lensLabel}`);
+    args.push('-metadata', `description=${lensLabel}`);
+  }
+
+  if (meta.dateTimeOriginal) {
+    const dt = new Date(meta.dateTimeOriginal);
+    if (!Number.isNaN(dt.getTime())) {
+      args.push('-metadata', `creation_time=${dt.toISOString()}`);
+    }
+  }
+
+  if (meta.latitude && meta.longitude) {
+    const lat = Number.parseFloat(meta.latitude);
+    const lon = Number.parseFloat(meta.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      args.push('-metadata', `location=${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+    }
+  }
+
+  if (meta.locationName) {
+    args.push('-metadata', `title=${String(meta.locationName)}`);
+  }
+
+  args.push('-movflags', '+faststart');
+  args.push(outputPath);
+  return args;
+}
+
+async function processVideo(file, meta) {
+  if (!runtimeCaps.ffmpeg) {
+    const err = new Error('服务器未安装 ffmpeg，无法处理视频。');
+    err.status = 500;
+    throw err;
+  }
+
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lens-video-'));
+  const inputExt = path.extname(file.originalname || 'video.mp4').toLowerCase();
+  const outputExt = meta.codec === 'hevc' ? '.mov' : '.mp4';
+  const inputPath = path.join(tmpDir, `input-${crypto.randomUUID()}${inputExt}`);
+  const outputPath = path.join(tmpDir, `output-${crypto.randomUUID()}${outputExt}`);
+
+  try {
+    await fs.promises.writeFile(inputPath, file.buffer);
+
+    const args = buildVideoFfmpegArgs(inputPath, outputPath, meta);
+    console.log('[video] ffmpeg', args.join(' '));
+
+    await new Promise((resolve, reject) => {
+      const proc = spawn(runtimeCaps.ffmpegPath || 'ffmpeg', args);
+      let stderr = '';
+      proc.stderr.on('data', d => { stderr += d.toString(); });
+      proc.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`ffmpeg 处理失败 (code ${code}): ${stderr.slice(-300)}`));
+      });
+      proc.on('error', reject);
+    });
+
+    const data = await fs.promises.readFile(outputPath);
+    return {
+      data,
+      ext: outputExt.replace('.', ''),
+      mime: meta.codec === 'hevc' ? 'video/quicktime' : 'video/mp4',
+    };
+  } finally {
+    await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(root, 'admin.html'));
+});
+
+app.get('/video-admin', (req, res) => {
+  res.sendFile(path.join(root, 'video-admin.html'));
 });
 
 app.post('/api.php', async (req, res) => {
@@ -356,6 +516,7 @@ app.get('/api/health', async (req, res) => {
     runtime: {
       sharp: runtimeCaps.sharp,
       exiftool: runtimeCaps.exiftool,
+      ffmpeg: runtimeCaps.ffmpeg,
       heifRead: runtimeCaps.heifRead,
       heifHevcWrite: runtimeCaps.heifHevcWrite,
     },
@@ -403,6 +564,63 @@ app.post('/api/process', upload.single('image'), async (req, res) => {
     res.status(status).json({
       code: status,
       msg: err.message || '图片处理失败',
+    });
+  }
+});
+
+/* ─── 视频处理接口 ─── */
+
+app.post('/api/video-process', videoUpload.single('video'), async (req, res) => {
+  try {
+    const meta = parseMeta(req.body.meta);
+    const code = normalizeCode(req.body.code);
+
+    const validation = await validateCard(code);
+    if (!validation.ok) {
+      await appendLog({ type: 'video.denied', card: maskCode(code), msg: validation.reason });
+      res.status(403).json({ code: 403, msg: validation.reason || '卡密无效' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ code: 400, msg: '请上传视频' });
+      return;
+    }
+
+    if (!runtimeCaps.ffmpeg) {
+      res.status(500).json({ code: 500, msg: '服务器未安装 ffmpeg' });
+      return;
+    }
+
+    const result = await processVideo(req.file, meta);
+    const base = path.basename(req.file.originalname || 'video', path.extname(req.file.originalname || ''));
+    const fileName = `${base}_edited.${result.ext}`;
+
+    await markCardUsed(code, String(req.body.device_hash || ''));
+    await appendLog({
+      type: 'video.ok',
+      card: maskCode(code),
+      fileName,
+      codec: meta.codec,
+      fps: meta.fps,
+      width: meta.width,
+      height: meta.height,
+      bytes: result.data.length,
+    });
+
+    res.setHeader('Content-Type', result.mime);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+    res.setHeader('X-File-Name', encodeURIComponent(fileName));
+    res.setHeader('X-Video-Width', String(meta.width));
+    res.setHeader('X-Video-Height', String(meta.height));
+    res.setHeader('X-Video-Fps', String(meta.fps));
+    res.send(result.data);
+  } catch (err) {
+    const status = err.status || 500;
+    await appendLog({ type: 'video.failed', msg: err.message || '视频处理失败' });
+    res.status(status).json({
+      code: status,
+      msg: err.message || '视频处理失败',
     });
   }
 });
@@ -555,6 +773,8 @@ async function detectCapabilities() {
   } catch {
     runtimeCaps.exiftool = false;
   }
+
+  await detectFfmpeg();
 }
 
 process.on('SIGINT', async () => {
