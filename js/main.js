@@ -332,6 +332,24 @@ async function sha256Hex(text) {
 }
 
 async function localVerifyCard(code, activate = false) {
+    // 1. 优先走后端 API 验证（admin 面板管理的卡密）
+    try {
+        const res = await fetch('api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'verify', code: code }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.code === 200) return true;
+            // 后端明确拒绝（卡密不存在/已停用/已过期/用完）
+            // 继续尝试前端哈希验证，兼容旧卡密
+        }
+    } catch (e) {
+        // 后端不可达，继续走前端验证
+    }
+
+    // 2. 回退到前端哈希验证（js/cards.js 中的旧卡密）
     const config = window.LENS_CARD_CONFIG || {};
     const entries = Array.isArray(config.entries)
         ? config.entries

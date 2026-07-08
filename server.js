@@ -477,6 +477,10 @@ app.get('/video-admin', (req, res) => {
   res.sendFile(path.join(root, 'video-admin.html'));
 });
 
+app.get('/video', (req, res) => {
+  res.sendFile(path.join(root, 'video.html'));
+});
+
 app.post('/api.php', async (req, res) => {
   const action = String(req.body?.action || '');
   const code = normalizeCode(req.body?.code);
